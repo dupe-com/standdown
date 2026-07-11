@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "standdown.js MV3 example",
+  "version": "0.1.0",
+  "description": "Minimal example using standdown/webext in an MV3 background service worker.",
+  "permissions": ["storage", "webNavigation", "webRequest", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Standdown",
+    "default_popup": "popup.html"
+  }
+}

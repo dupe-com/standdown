@@ -1,0 +1,171 @@
+# standdown
+
+Affiliate stand-down, done right, for browser extensions.
+
+Built and maintained by Dupe.
+
+`standdown` is a zero-runtime-dependency TypeScript library for extension
+developers who need to detect existing affiliate attribution, suppress
+competing activation, and prove that suppression decisions were made locally and
+deterministically.
+
+It ships four surfaces:
+
+| Import | Purpose |
+| --- | --- |
+| `standdown` | Pure core: detection, session state machine, activation guard, policy validation, signed bundle verification, Rakuten converters |
+| `standdown/policies` | Bundled policy packs and helpers |
+| `standdown/webext` | Manifest V3 background/service-worker adapter |
+| `standdown/content` | Content-script signal collector and evaluator |
+
+## Install
+
+```sh
+npm install standdown
+```
+
+This package is pre-release. Publishing is a human launch step; the repo should
+not publish from CI.
+
+## Webext Quickstart
+
+```ts
+import { allPolicies } from 'standdown/policies';
+import { createStanddown } from 'standdown/webext';
+
+const standdown = createStanddown({
+  policies: allPolicies,
+  selfPatterns: [{ name: 'my_click_id', networkId: 'cj' }],
+  publisherSites: ['example-publisher.com'],
+});
+```
+
+The adapter observes `chrome.webRequest.onBeforeRequest` redirect chains when
+available and falls back to `chrome.webNavigation.onCommitted` final-URL signal
+collection when reduced permissions or Safari-style APIs require it. Content
+scripts and popups can query the background worker with:
+
+`chrome.webNavigation.onCommitted` is required. `createStanddown()` throws when
+that API is unavailable because an adapter that observes no navigations would
+fail open.
+
+```ts
+const response = await chrome.runtime.sendMessage({
+  type: 'standdown:shouldStandDown',
+  tabId,
+  url,
+});
+```
+
+Signed policy refresh is optional and runs outside the decision path:
+
+```ts
+createStanddown({
+  policies: allPolicies,
+  refresh: {
+    url: 'https://static.example.com/standdown.bundle.json',
+    publicKeyJwk,
+    intervalMs: 60 * 60 * 1000,
+  },
+});
+```
+
+Only monotone updates are applied: detection coverage may broaden, durations may
+lengthen, and activation rules must remain unchanged. Added overlapping
+policies cannot downgrade a decision because the session layer unions behaviors
+from every policy matching the advertiser. Signed bundles also reject overly
+complex regex `DomainRule` patterns before they can enter local detection.
+
+## Content Quickstart
+
+```ts
+import { allPolicies } from 'standdown/policies';
+import { createContentStanddown } from 'standdown/content';
+
+const standdown = createContentStanddown({
+  policies: allPolicies,
+  storage: 'session',
+  publisherSites: ['example-publisher.com'],
+});
+
+const decision = await standdown.ready;
+```
+
+The content adapter collects only local page signals: `location.href`,
+`document.referrer`, and first-party cookie names. Cookie values are never
+included. SPA navigations are re-evaluated via `pushState`, `replaceState`, and
+`popstate` hooks.
+
+`storage: 'local-ttl'` stores session records in `localStorage` with a sliding
+24-hour envelope TTL by default. The TTL clears session records, not audit
+history; per-policy stand-down durations remain enforced by the core state
+machine.
+
+## Core Usage
+
+```ts
+import { MemoryStateStore, StanddownSession, guardActivation } from 'standdown';
+import { cjPolicy } from 'standdown/policies';
+
+const session = new StanddownSession(new MemoryStateStore());
+const decision = await session.ingest(
+  { url: 'https://merchant.example/?cjevent=abc', now: Date.now() },
+  [cjPolicy],
+);
+
+const guard = guardActivation({
+  decision,
+  userGesture: { isTrusted: true, type: 'click', timeStamp: performance.now() },
+  benefit: { kind: 'cashback', description: 'Activate cashback.' },
+  policy: cjPolicy,
+});
+```
+
+## Public Commitments
+
+- **I1: Client-side decisions only.** No network call participates in a
+  stand-down decision. Refresh may update the already-applied local policy
+  bundle asynchronously, but decisions use local state synchronously.
+- **I2: No user profiling.** Signals are a closed type and exclude user identity,
+  accounts, balances, emails, login state, and tester-differentiating data.
+- **I3: Fail toward standing down.** Unknown, ambiguous, malformed, or storage
+  error states suppress activation.
+- **I4: Monotone remote updates.** Signed refresh bundles may only broaden
+  detection or lengthen durations and may not edit activation rules.
+- **I5: Audit log on by default.** Decisions and refresh outcomes are locally
+  auditable.
+- **I6: No remote code.** Policies are data. No eval, remote scripts, or dynamic
+  code loading.
+- **I7: Deterministic and loggable.** Given the same local signals, policies,
+  state, and clock, decisions are reproducible.
+
+## Interop
+
+`fromRakutenPolicy()` and `toRakutenPolicy()` convert Rakuten
+`NetworkPolicy` schemaVersion 2 data. Rakuten's schema is detection-only, so
+native fields such as cookie rules, initiator rules, activation guard details,
+stand-down behaviors, citations, audit semantics, multi-group `anyOf` param
+rules, and `match: 'contains'` params are lossy when emitting Rakuten v2. The
+bundled `rakuten` policy itself intentionally does not round-trip exactly.
+
+## Policy Packs
+
+| Policy | Main signals | Stand-down | Activation |
+| --- | --- | --- | --- |
+| `cj` | `cjevent`, `cjdata`, `utm_source=cj`, `sf_cs=cj`, `afsrc=1`, CJ redirect domains, CJ cookie names | Session-or-min 30m | User click |
+| `impact` | `afsrc=1`, `irclickid`, `irgwc`, `im_ref` cookie names | Session-or-min 30m | User click |
+| `rakuten` | `ranMID`, `ranEAID`, `ranSiteID`, `siteID`, LinkSynergy redirect domains, LinkShare cookie names | Session-or-min fallback | User click |
+| `awin` | `awc`, `utm_source=aw`, `source=aw`, `awin1.com` | CoC defaults | User click |
+| `shareasale` | `sscid`, ShareASale redirect domains, `sscid` cookie name | CoC defaults | User click |
+| `ebay-epn` | eBay EPN params, `rover.ebay.com`, scoped referrer classification | CoC defaults | User click, max 2 prompts |
+| `amazon` | Amazon `tag` on Amazon advertiser hosts | Suppression visibility only | Never |
+| `sovrn-skimlinks` | Skimlinks redirect domains | CoC defaults | User click |
+| `partnerize` | `clickref`, `prf.hn` | CoC defaults | User click |
+| `universal` | Full `piedotorg/standdown-domains` list plus `afsrc=1` | CoC defaults | User click |
+
+See [POLICIES.md](./POLICIES.md) for citations and attribution.
+
+## Example
+
+See [examples/mv3-extension](./examples/mv3-extension) for a minimal Manifest V3
+background worker and popup using `standdown/webext`.

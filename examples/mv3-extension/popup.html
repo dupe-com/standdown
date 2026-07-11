@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Standdown</title>
+    <style>
+      body {
+        min-width: 240px;
+        margin: 0;
+        padding: 16px;
+        font: 14px/1.4 system-ui, sans-serif;
+      }
+
+      #state {
+        font-weight: 700;
+      }
+
+      #reason {
+        margin-top: 8px;
+        color: #555;
+      }
+
+      #activate {
+        margin-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="state">Standing down</div>
+    <div id="reason">Checking state.</div>
+    <button id="activate" type="button">Activate</button>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
