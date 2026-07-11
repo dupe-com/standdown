@@ -1,0 +1,29 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="standdown mark">
+  <defs>
+    <linearGradient id="tile" x1="96" y1="72" x2="416" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#211C16"/>
+      <stop offset="1" stop-color="#141009"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="176" y1="188" x2="336" y2="388" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFC24B"/>
+      <stop offset="1" stop-color="#F5A623"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="48" y="48" width="416" height="416" rx="116" fill="url(#tile)"/>
+  <rect x="48.5" y="48.5" width="415" height="415" rx="115.5" fill="none" stroke="#F5A623" stroke-opacity="0.20" stroke-width="1"/>
+  <rect x="64" y="64" width="384" height="200" rx="100" fill="#FFFFFF" fill-opacity="0.04"/>
+
+  <g filter="url(#glow)" stroke="url(#signal)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M168 190 L256 262 L344 190"/>
+    <path d="M168 250 L256 322 L344 250"/>
+    <path d="M182 372 H330" stroke-opacity="0.85"/>
+  </g>
+</svg>

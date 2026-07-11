@@ -1,8 +1,22 @@
-# standdown
+<p align="center">
+  <img src="https://raw.githubusercontent.com/dupe-com/standdown/main/assets/logo.png" alt="standdown — affiliate stand-down, done right" width="620">
+</p>
 
-Affiliate stand-down, done right, for browser extensions.
+<p align="center">
+  <a href="https://www.npmjs.com/package/standdown"><img src="https://img.shields.io/npm/v/standdown?color=F5A623&label=npm&labelColor=1C1917" alt="npm version"></a>
+  <a href="https://github.com/dupe-com/standdown/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/dupe-com/standdown/ci.yml?branch=main&label=CI&labelColor=1C1917" alt="CI status"></a>
+  <img src="https://img.shields.io/badge/tests-87%20passing-2ea043?labelColor=1C1917" alt="87 tests passing">
+  <img src="https://img.shields.io/badge/dependencies-0-2ea043?labelColor=1C1917" alt="zero runtime dependencies">
+  <img src="https://img.shields.io/badge/types-included-3178C6?labelColor=1C1917" alt="TypeScript types included">
+  <a href="./LICENSE"><img src="https://img.shields.io/npm/l/standdown?color=8A8175&labelColor=1C1917" alt="MIT license"></a>
+  <a href="https://affiliatecoc.org"><img src="https://img.shields.io/badge/aligned-Affiliate%20CoC-F5A623?labelColor=1C1917" alt="aligned with the Affiliate Code of Conduct"></a>
+</p>
 
-Built and maintained by Dupe.
+> **Your extension shouldn't steal the sale.** `standdown` detects existing
+> affiliate attribution, suppresses competing activation, and proves the
+> decision was made locally — never on a server.
+
+Built and maintained by [Dupe](https://dupe.com).
 
 `standdown` is a zero-runtime-dependency TypeScript library for extension
 developers who need to detect existing affiliate attribution, suppress
@@ -24,8 +38,8 @@ It ships four surfaces:
 npm install standdown
 ```
 
-This package is pre-release. Publishing is a human launch step; the repo should
-not publish from CI.
+`standdown` is published to npm and versioned with semver from `0.1.0`. Releases
+are cut by a human; the repo does not publish from CI.
 
 ## Webext Quickstart
 

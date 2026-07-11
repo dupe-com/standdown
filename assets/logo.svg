@@ -1,0 +1,44 @@
+<svg width="960" height="280" viewBox="0 0 960 280" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="standdown — affiliate stand-down, done right">
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="280" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#211C16"/>
+      <stop offset="1" stop-color="#141009"/>
+    </linearGradient>
+    <linearGradient id="tile2" x1="40" y1="56" x2="208" y2="224" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2A241C"/>
+      <stop offset="1" stop-color="#17130C"/>
+    </linearGradient>
+    <linearGradient id="signal2" x1="70" y1="96" x2="178" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFC24B"/>
+      <stop offset="1" stop-color="#F5A623"/>
+    </linearGradient>
+    <filter id="glow2" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="959" height="279" rx="28" fill="url(#panel)"/>
+  <rect x="0.5" y="0.5" width="959" height="279" rx="28" fill="none" stroke="#F5A623" stroke-opacity="0.16" stroke-width="1"/>
+
+  <!-- indicator tile -->
+  <rect x="40" y="56" width="168" height="168" rx="48" fill="url(#tile2)"/>
+  <rect x="40.5" y="56.5" width="167" height="167" rx="47.5" fill="none" stroke="#F5A623" stroke-opacity="0.22" stroke-width="1"/>
+  <g filter="url(#glow2)" stroke="url(#signal2)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M87 108 L124 138 L161 108"/>
+    <path d="M87 132 L124 162 L161 132"/>
+    <path d="M93 188 H155" stroke-opacity="0.85"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="250" y="152" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="94" font-weight="800" letter-spacing="-3">
+    <tspan fill="#F4EEE4">stand</tspan><tspan fill="#F5A623">down</tspan>
+  </text>
+
+  <!-- telemetry tagline -->
+  <circle cx="252" cy="196" r="5" fill="#F5A623"/>
+  <text x="270" y="201" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace" font-size="19" font-weight="500" letter-spacing="3.4" fill="#9C9184">AFFILIATE STAND-DOWN &#183; DONE RIGHT</text>
+</svg>
