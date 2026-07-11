@@ -104,6 +104,14 @@ export interface Signals {
   initiator?: string;
   selfPatterns?: readonly SelfExemption[];
   publisherSites?: readonly string[];
+  /**
+   * How complete the collected signal set is. `'partial'` means the collector
+   * could not observe the full set (e.g. no redirect-chain / `webRequest`
+   * plane, as in the content adapter or a webNavigation-only webext adapter),
+   * so a *non*-stand-down decision may be a false negative. Defaults to `'full'`
+   * when omitted. Never carries user data.
+   */
+  signalCoverage?: 'full' | 'partial';
   now: number;
 }
 
@@ -150,6 +158,14 @@ export interface Decision {
   expiresAt?: number;
   behaviors: Behavior[];
   referrerClass?: ReferrerClass;
+  /**
+   * Set when this is a `standDown: false` decision reached from a partial signal
+   * set (`Signals.signalCoverage === 'partial'`): the "no stand-down" may be a
+   * false negative because the collector couldn't see everything. Integrators
+   * that want to fail fully closed can treat a degraded non-stand-down as a
+   * stand-down. Not set on stand-down decisions (over-suppression is safe).
+   */
+  degraded?: boolean;
 }
 
 export interface UserGesture {

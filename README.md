@@ -119,6 +119,22 @@ included. SPA navigations are re-evaluated via `pushState`, `replaceState`, and
 history; per-policy stand-down durations remain enforced by the core state
 machine.
 
+### Degraded decisions
+
+The content adapter (and a webext adapter running without the `webRequest`
+plane) cannot observe redirect chains, so it sets `Signals.signalCoverage =
+'partial'`. When a decision comes back `standDown: false` from a partial signal
+set, it carries `degraded: true` — the "no stand-down" may be a false negative
+because a redirect-only attribution could have been missed. Stand-down decisions
+are never marked degraded (over-suppression is the safe direction). Integrators
+that want to fail fully closed can treat a degraded non-stand-down as a
+stand-down:
+
+```ts
+const decision = await standdown.ready;
+const suppress = decision.standDown || decision.degraded;
+```
+
 ## Core Usage
 
 ```ts

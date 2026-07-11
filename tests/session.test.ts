@@ -374,6 +374,47 @@ describe('StanddownSession', () => {
 
     expect(decision).toMatchObject({ standDown: true, policyId: 'test-disable' });
   });
+
+  it('marks a partial-coverage non-stand-down as degraded', async () => {
+    const session = new StanddownSession(new MemoryStateStore());
+    const decision = await session.ingest(
+      {
+        url: 'https://merchant.example/products/1',
+        now: 0,
+        signalCoverage: 'partial',
+      },
+      [cjPolicy],
+    );
+
+    expect(decision.standDown).toBe(false);
+    expect(decision.degraded).toBe(true);
+  });
+
+  it('does not mark degraded when coverage is full', async () => {
+    const session = new StanddownSession(new MemoryStateStore());
+    const decision = await session.ingest(
+      { url: 'https://merchant.example/products/1', now: 0 },
+      [cjPolicy],
+    );
+
+    expect(decision.standDown).toBe(false);
+    expect(decision.degraded).toBeUndefined();
+  });
+
+  it('does not mark degraded on a stand-down even under partial coverage', async () => {
+    const session = new StanddownSession(new MemoryStateStore());
+    const decision = await session.ingest(
+      {
+        url: 'https://merchant.example/?cjevent=abc',
+        now: 0,
+        signalCoverage: 'partial',
+      },
+      [cjPolicy],
+    );
+
+    expect(decision.standDown).toBe(true);
+    expect(decision.degraded).toBeUndefined();
+  });
 });
 
 class FailingLoadStore implements StateStore {
