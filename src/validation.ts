@@ -92,13 +92,6 @@ export function validatePolicy(value: unknown): asserts value is StanddownPolicy
     throw new TypeError('policy.activation.mode is invalid');
   }
 
-  if (activation.maxPromptsPerJourney !== undefined) {
-    nonNegativeFiniteNumber(
-      activation.maxPromptsPerJourney,
-      'policy.activation.maxPromptsPerJourney',
-    );
-  }
-
   for (const referrerClass of optionalArray(
     activation.allowedReferrerClasses,
     'policy.activation.allowedReferrerClasses',

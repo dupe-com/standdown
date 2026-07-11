@@ -56,7 +56,6 @@ interface StanddownPolicy {
   }
   activation: {
     mode: 'user-click' | 'never'   // amazon: 'never'
-    maxPromptsPerJourney?: number  // ebay-epn: 2
     allowedReferrerClasses?: ('own-site' | 'organic' | 'direct')[]  // ebay-epn
   }
   metadata: { sourceUrl: string; lastVerified: string; notes?: string }
@@ -146,7 +145,7 @@ Every pack entry carries `metadata.sourceUrl` + `lastVerified: '2026-07-10'`. Se
 | `rakuten` | `ranMID`+`ranEAID`+`ranSiteID` OR-groups `siteID` | click.linksynergy.com, linksynergy.* | `lsclick_mid*`, `*linkshare*` (substring) | session-or-min (browser session) | user-click |
 | `awin` | `awc`; corroborating `utm_source=aw`, `source=aw` | awin1.com | — | session-or-min | user-click |
 | `shareasale` | `sscid` | shareasale.com | `sscid` (substring) | session-or-min | user-click |
-| `ebay-epn` | `campid`, `pubid`, `mkevt`, `mkcid`, `mkrid`; groups: [campid+_trkparms], [mktype+gclid] | rover.ebay.com | — | re-stand-down on any new non-approved source in-session | user-click, maxPromptsPerJourney 2, allowedReferrerClasses own-site/organic/direct |
+| `ebay-epn` | `campid`, `pubid`, `mkevt`, `mkcid`, `mkrid`; groups: [campid+_trkparms], [mktype+gclid] | rover.ebay.com | — | re-stand-down on any new non-approved source in-session | user-click, allowedReferrerClasses own-site/organic/direct |
 | `amazon` | `tag` (detect only) | — | — | n/a | **never** (Operating Agreement bans extensions carrying Special Links) |
 | `sovrn-skimlinks` | — | go.skimresources.com, go.redirectingat.com | — | session-or-min | user-click (generic conduct rules; no published signal) |
 | `partnerize` | `clickref` | prf.hn | — | session-or-min | user-click |

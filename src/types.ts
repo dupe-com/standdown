@@ -70,7 +70,6 @@ export interface StanddownPolicy {
   };
   activation: {
     mode: 'user-click' | 'never';
-    maxPromptsPerJourney?: number;
     allowedReferrerClasses?: readonly ('own-site' | 'organic' | 'direct')[];
   };
   metadata: {
@@ -141,7 +140,6 @@ export interface Decision {
   reason: string;
   expiresAt?: number;
   behaviors: Behavior[];
-  promptCount?: number;
   referrerClass?: ReferrerClass;
 }
 
