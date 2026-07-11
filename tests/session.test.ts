@@ -343,6 +343,78 @@ describe('StanddownSession', () => {
       ),
     ).not.toThrow();
   });
+
+  it('stands down through ingest on a disabled host with no attribution params', async () => {
+    const disableHostPolicy = {
+      id: 'test-disable',
+      schemaVersion: 3,
+      policyVersion: '0.0.0',
+      network: { id: 'test-net', name: 'Test Network' },
+      detection: {
+        disableHosts: [{ pattern: 'ebay.com', kind: 'suffix' }],
+      },
+      standdown: {
+        scope: 'advertiser',
+        sessionRule: 'session-or-min',
+        minDurationMs: 0,
+        behaviors,
+      },
+      activation: { mode: 'user-click' },
+      metadata: {
+        sourceUrl: 'https://example.com/policy',
+        lastVerified: '2026-07-11',
+      },
+    } as const satisfies StanddownPolicy;
+
+    const session = new StanddownSession(new MemoryStateStore());
+    const decision = await session.ingest(
+      { url: 'https://www.ebay.com/itm/123', now: 0 },
+      [disableHostPolicy],
+    );
+
+    expect(decision).toMatchObject({ standDown: true, policyId: 'test-disable' });
+  });
+
+  it('marks a partial-coverage non-stand-down as degraded', async () => {
+    const session = new StanddownSession(new MemoryStateStore());
+    const decision = await session.ingest(
+      {
+        url: 'https://merchant.example/products/1',
+        now: 0,
+        signalCoverage: 'partial',
+      },
+      [cjPolicy],
+    );
+
+    expect(decision.standDown).toBe(false);
+    expect(decision.degraded).toBe(true);
+  });
+
+  it('does not mark degraded when coverage is full', async () => {
+    const session = new StanddownSession(new MemoryStateStore());
+    const decision = await session.ingest(
+      { url: 'https://merchant.example/products/1', now: 0 },
+      [cjPolicy],
+    );
+
+    expect(decision.standDown).toBe(false);
+    expect(decision.degraded).toBeUndefined();
+  });
+
+  it('does not mark degraded on a stand-down even under partial coverage', async () => {
+    const session = new StanddownSession(new MemoryStateStore());
+    const decision = await session.ingest(
+      {
+        url: 'https://merchant.example/?cjevent=abc',
+        now: 0,
+        signalCoverage: 'partial',
+      },
+      [cjPolicy],
+    );
+
+    expect(decision.standDown).toBe(true);
+    expect(decision.degraded).toBeUndefined();
+  });
 });
 
 class FailingLoadStore implements StateStore {

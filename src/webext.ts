@@ -300,6 +300,9 @@ export function createStanddown(
       initiator,
       selfPatterns: opts.selfPatterns,
       publisherSites: opts.publisherSites,
+      // Without the webRequest plane we never observe redirect chains, so a
+      // non-stand-down could be a false negative — mark the coverage partial.
+      signalCoverage: mode === 'webRequest' ? 'full' : 'partial',
     });
 
     return session.ingest(signals, activePolicies);
@@ -470,11 +473,16 @@ function navigationSignals(value: {
   initiator: string | undefined;
   selfPatterns: readonly SelfExemption[] | undefined;
   publisherSites: readonly string[] | undefined;
+  signalCoverage: Signals['signalCoverage'];
 }): Signals {
   const signals: Signals = {
     url: value.url,
     now: value.now,
   };
+
+  if (value.signalCoverage !== undefined) {
+    signals.signalCoverage = value.signalCoverage;
+  }
 
   if (value.redirectChain !== undefined && value.redirectChain.length > 0) {
     signals.redirectChain = [...value.redirectChain];

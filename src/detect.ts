@@ -41,6 +41,23 @@ export function detect(
   let selfMatch = false;
 
   for (const policy of policies) {
+    const disabledHostRule = (policy.detection.disableHosts ?? []).find((rule) =>
+      domainRuleMatchesUrl(rule, advertiserHost),
+    );
+
+    if (disabledHostRule) {
+      matched.push(
+        matchedRule(
+          policy,
+          'disabled-host',
+          `${disabledHostRule.kind}:${disabledHostRule.pattern}`,
+          advertiserHost,
+          disabledHostRule.comment ?? 'host disabled for this network',
+        ),
+      );
+      continue;
+    }
+
     const scopedSelfMatch = hasScopedSelfExemption(
       currentUrl,
       signals.selfPatterns,
@@ -230,19 +247,23 @@ function matchedRule(
 }
 
 function kindPriority(kind: MatchedRule['kind']): number {
-  if (kind === 'redirect-domain') {
+  if (kind === 'disabled-host') {
     return 0;
   }
 
-  if (kind === 'landing-param') {
+  if (kind === 'redirect-domain') {
     return 1;
   }
 
-  if (kind === 'cookie') {
+  if (kind === 'landing-param') {
     return 2;
   }
 
-  return 3;
+  if (kind === 'cookie') {
+    return 3;
+  }
+
+  return 4;
 }
 
 function paramRuleMatches(rule: ParamRule, params: URLSearchParams): boolean {

@@ -119,6 +119,22 @@ included. SPA navigations are re-evaluated via `pushState`, `replaceState`, and
 history; per-policy stand-down durations remain enforced by the core state
 machine.
 
+### Degraded decisions
+
+The content adapter (and a webext adapter running without the `webRequest`
+plane) cannot observe redirect chains, so it sets `Signals.signalCoverage =
+'partial'`. When a decision comes back `standDown: false` from a partial signal
+set, it carries `degraded: true` — the "no stand-down" may be a false negative
+because a redirect-only attribution could have been missed. Stand-down decisions
+are never marked degraded (over-suppression is the safe direction). Integrators
+that want to fail fully closed can treat a degraded non-stand-down as a
+stand-down:
+
+```ts
+const decision = await standdown.ready;
+const suppress = decision.standDown || decision.degraded;
+```
+
 ## Core Usage
 
 ```ts
@@ -156,6 +172,32 @@ const guard = guardActivation({
   code loading.
 - **I7: Deterministic and loggable.** Given the same local signals, policies,
   state, and clock, decisions are reproducible.
+
+## Per-host disable
+
+Some merchants are ones where competing activation is never acceptable — the
+integrator wants to go fully quiet on that host rather than detect-then-suppress.
+`detection.disableHosts` expresses that: any navigation whose advertiser host
+matches stands down **unconditionally**, regardless of params, cookies, or
+self-exemption. It is the strongest match kind (`disabled-host`), and it is how
+you model a "we do not operate here at all" list (the extension's
+`disable_domains`).
+
+```ts
+const merchantBlocklistPolicy = {
+  // ...id, network, standdown, activation, metadata...
+  detection: {
+    disableHosts: [
+      { pattern: '(^|\\.)ebay\\.[a-z.]+$', kind: 'regex' },
+      { pattern: 'homedepot.com', kind: 'suffix' },
+    ],
+  },
+};
+```
+
+A `disableHosts` match cannot be cleared by a `selfPatterns` exemption — if you
+list a host here, your own attribution on that host still stands down. Use it
+only for hosts where you never want to activate.
 
 ## Interop
 

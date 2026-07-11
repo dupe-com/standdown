@@ -30,6 +30,15 @@ describe('content adapter', () => {
     expect(JSON.stringify(signals)).not.toContain('hidden=value');
   });
 
+  it('reports partial signal coverage (no redirect-chain plane)', () => {
+    const signals = collectContentSignals({
+      window: new FakeContentWindow('https://merchant.example/product', ''),
+      now: () => 1_000,
+    });
+
+    expect(signals.signalCoverage).toBe('partial');
+  });
+
   it('matches cookie rules only against extracted names', async () => {
     const windowLike = new FakeContentWindow(
       'https://merchant.example/product',

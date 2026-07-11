@@ -117,6 +117,7 @@ export class StanddownSession {
             referrerClass: advertiserHost
               ? classifyReferrer(signals, advertiserHost)
               : 'other',
+            ...(signals.signalCoverage === 'partial' ? { degraded: true } : {}),
           } satisfies Decision),
         detection,
       };

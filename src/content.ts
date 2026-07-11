@@ -208,6 +208,9 @@ export function collectContentSignals(
   const signals: Signals = {
     url: windowLike.location.href,
     now: now(),
+    // The content plane never observes redirect chains, so a non-stand-down
+    // here can miss redirect-only attribution.
+    signalCoverage: 'partial',
   };
   const referrer = windowLike.document.referrer;
   const cookieNames = cookieNamesFromString(windowLike.document.cookie);
