@@ -431,6 +431,82 @@ describe('detect', () => {
   });
 });
 
+describe('detect disableHosts', () => {
+  const disableHostPolicy = {
+    id: 'test-disable',
+    schemaVersion: 3,
+    policyVersion: '0.0.0',
+    network: { id: 'test-net', name: 'Test Network' },
+    detection: {
+      disableHosts: [{ pattern: '(^|\\.)ebay\\.[a-z.]+$', kind: 'regex' }],
+      landingParams: [{ anyOf: [{ allOf: [{ name: 'clickid' }] }] }],
+    },
+    standdown: {
+      scope: 'advertiser',
+      sessionRule: 'session-or-min',
+      minDurationMs: 0,
+      behaviors: [
+        'suppress-prompts',
+        'no-cookie-write',
+        'no-redirect',
+        'no-background-tracking',
+      ],
+    },
+    activation: { mode: 'user-click' },
+    metadata: {
+      sourceUrl: 'https://example.com/policy',
+      lastVerified: '2026-07-11',
+    },
+  } as const satisfies StanddownPolicy;
+
+  it('stands down unconditionally on a disabled host with no attribution params', () => {
+    const detection = detect(
+      { ...DEFAULT_SIGNALS, url: 'https://www.ebay.com/itm/123' },
+      [disableHostPolicy],
+    );
+
+    expect(detection.matched[0]?.kind).toBe('disabled-host');
+    expect(detection.strongest?.policyId).toBe('test-disable');
+  });
+
+  it('lets disabled-host outrank any other signal on the same host', () => {
+    const detection = detect(
+      { ...DEFAULT_SIGNALS, url: 'https://www.ebay.com/itm/1?clickid=abc' },
+      [disableHostPolicy],
+    );
+
+    // The host is disabled, so no other rule is even collected for this policy.
+    expect(detection.matched).toHaveLength(1);
+    expect(detection.matched[0]?.kind).toBe('disabled-host');
+  });
+
+  it('stands down on a disabled host even when a self-exemption param is present', () => {
+    const detection = detect(
+      {
+        ...DEFAULT_SIGNALS,
+        url: 'https://www.ebay.com/itm/1?clickid=mine',
+        selfPatterns: [{ name: 'clickid', policyId: 'test-disable' }],
+      },
+      [disableHostPolicy],
+    );
+
+    expect(
+      detection.matched.some((match) => match.kind === 'disabled-host'),
+    ).toBe(true);
+  });
+
+  it('does not stand down on a non-disabled host', () => {
+    const detection = detect(
+      { ...DEFAULT_SIGNALS, url: 'https://merchant.example/x' },
+      [disableHostPolicy],
+    );
+
+    expect(
+      detection.matched.some((match) => match.kind === 'disabled-host'),
+    ).toBe(false);
+  });
+});
+
 function urlForGroup(group: ParamGroup, policy: StanddownPolicy): string {
   const url = new URL(urlForPolicy(policy));
 

@@ -343,6 +343,37 @@ describe('StanddownSession', () => {
       ),
     ).not.toThrow();
   });
+
+  it('stands down through ingest on a disabled host with no attribution params', async () => {
+    const disableHostPolicy = {
+      id: 'test-disable',
+      schemaVersion: 3,
+      policyVersion: '0.0.0',
+      network: { id: 'test-net', name: 'Test Network' },
+      detection: {
+        disableHosts: [{ pattern: 'ebay.com', kind: 'suffix' }],
+      },
+      standdown: {
+        scope: 'advertiser',
+        sessionRule: 'session-or-min',
+        minDurationMs: 0,
+        behaviors,
+      },
+      activation: { mode: 'user-click' },
+      metadata: {
+        sourceUrl: 'https://example.com/policy',
+        lastVerified: '2026-07-11',
+      },
+    } as const satisfies StanddownPolicy;
+
+    const session = new StanddownSession(new MemoryStateStore());
+    const decision = await session.ingest(
+      { url: 'https://www.ebay.com/itm/123', now: 0 },
+      [disableHostPolicy],
+    );
+
+    expect(decision).toMatchObject({ standDown: true, policyId: 'test-disable' });
+  });
 });
 
 class FailingLoadStore implements StateStore {

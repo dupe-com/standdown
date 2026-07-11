@@ -56,6 +56,9 @@ export function validatePolicy(value: unknown): asserts value is StanddownPolicy
   optionalArray(detection.initiatorRules, 'policy.detection.initiatorRules').forEach(
     validateInitiatorRule,
   );
+  optionalArray(detection.disableHosts, 'policy.detection.disableHosts').forEach(
+    validateDomainRule,
+  );
 
   const standdown = object(policy.standdown, 'policy.standdown');
   literal(standdown.scope, 'advertiser', 'policy.standdown.scope');

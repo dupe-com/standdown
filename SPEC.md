@@ -46,6 +46,7 @@ interface StanddownPolicy {
     redirectDomains?: DomainRule[] // matched against redirect-chain hops (background plane)
     cookiePatterns?: CookieRule[]  // matched against first-party cookie names (content plane)
     initiatorRules?: InitiatorRule[] // eBay-style referrer classification
+    disableHosts?: DomainRule[]    // unconditional stand-down on these advertiser hosts, regardless of params/cookies/self-exemption
   }
   standdown: {
     scope: 'advertiser'            // only value in v1; field exists for forward compat

@@ -60,6 +60,14 @@ export interface StanddownPolicy {
     redirectDomains?: readonly DomainRule[];
     cookiePatterns?: readonly CookieRule[];
     initiatorRules?: readonly InitiatorRule[];
+    /**
+     * Hosts on which this network is treated as unconditionally attributed:
+     * any navigation whose advertiser host matches stands down regardless of
+     * params, cookies, or self-exemption. This is the "we do not operate here
+     * at all" primitive (the extension's `disable_domains`), for merchants
+     * where competing activation is never acceptable.
+     */
+    disableHosts?: readonly DomainRule[];
   };
   standdown: {
     scope: 'advertiser';
@@ -100,6 +108,7 @@ export interface Signals {
 }
 
 export type MatchedRuleKind =
+  | 'disabled-host'
   | 'landing-param'
   | 'redirect-domain'
   | 'cookie'
@@ -122,9 +131,9 @@ export interface Detection {
   /**
    * Highest-priority match for state decisions.
    *
-   * Ordering is deterministic: redirect-domain > landing-param > cookie >
-   * initiator. Ties keep the policy array order, then the rule order inside
-   * that policy.
+   * Ordering is deterministic: disabled-host > redirect-domain > landing-param >
+   * cookie > initiator. Ties keep the policy array order, then the rule order
+   * inside that policy.
    */
   strongest?: {
     policyId: string;
