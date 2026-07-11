@@ -54,14 +54,18 @@ const standdown = createStanddown({
 });
 ```
 
-The adapter observes `chrome.webRequest.onBeforeRequest` redirect chains when
-available and falls back to `chrome.webNavigation.onCommitted` final-URL signal
-collection when reduced permissions or Safari-style APIs require it. Content
-scripts and popups can query the background worker with:
+The `standdown/webext` adapter is the Chromium-MV3 path. It observes
+`chrome.webRequest.onBeforeRequest` redirect chains when available and uses
+`chrome.webNavigation.onCommitted` final-URL signal collection when `webRequest`
+is reduced or unavailable. `chrome.webNavigation.onCommitted` itself is
+**required**: `createStanddown()` throws when that API is absent, because an
+adapter that observes no navigations would fail open.
 
-`chrome.webNavigation.onCommitted` is required. `createStanddown()` throws when
-that API is unavailable because an adapter that observes no navigations would
-fail open.
+Safari and other reduced-permission contexts do **not** run this adapter — they
+use the page-level `standdown/content` adapter below, which collects signals from
+the page (`location.href`, `document.referrer`, first-party cookie names) and
+needs no `chrome.*` network APIs. Content scripts and popups can query the
+background worker with:
 
 ```ts
 const response = await chrome.runtime.sendMessage({
@@ -166,16 +170,33 @@ bundled `rakuten` policy itself intentionally does not round-trip exactly.
 
 | Policy | Main signals | Stand-down | Activation |
 | --- | --- | --- | --- |
-| `cj` | `cjevent`, `cjdata`, `utm_source=cj`, `sf_cs=cj`, `afsrc=1`, CJ redirect domains, CJ cookie names | Session-or-min 30m | User click |
-| `impact` | `afsrc=1`, `irclickid`, `irgwc`, `im_ref` cookie names | Session-or-min 30m | User click |
+| `cj` | `cjevent`, `cjdata`, `utm_source=cj`, `sf_cs=cj`, `afsrc=1`, CJ redirect domains, CJ cookie names | Session-or-min 60m | User click |
+| `impact` | `afsrc=1`, `irclickid`, `irgwc`, `im_ref` cookie names | Session-or-min | User click |
 | `rakuten` | `ranMID`, `ranEAID`, `ranSiteID`, `siteID`, LinkSynergy redirect domains, LinkShare cookie names | Session-or-min fallback | User click |
 | `awin` | `awc`, `utm_source=aw`, `source=aw`, `awin1.com` | CoC defaults | User click |
 | `shareasale` | `sscid`, ShareASale redirect domains, `sscid` cookie name | CoC defaults | User click |
-| `ebay-epn` | eBay EPN params, `rover.ebay.com`, scoped referrer classification | CoC defaults | User click, max 2 prompts |
+| `ebay-epn` | eBay EPN params, `rover.ebay.com`, scoped referrer classification | CoC defaults | User click |
 | `amazon` | Amazon `tag` on Amazon advertiser hosts | Suppression visibility only | Never |
-| `sovrn-skimlinks` | Skimlinks redirect domains | CoC defaults | User click |
-| `partnerize` | `clickref`, `prf.hn` | CoC defaults | User click |
+| `sovrn-skimlinks` † | Skimlinks redirect domains | CoC defaults | User click |
+| `partnerize` † | `clickref`, `prf.hn` | CoC defaults | User click |
 | `universal` | Full `piedotorg/standdown-domains` list plus `afsrc=1` | CoC defaults | User click |
+
+`allPolicies` is the **verified** default set. Packs marked † (`sovrn-skimlinks`,
+`partnerize`) have redirect domains inferred from domain knowledge rather than
+verified against network documentation, so they are excluded from `allPolicies`
+and exported separately as `experimentalPolicies`. Opt in explicitly once you
+have verified them for your integration:
+
+```ts
+import { allPolicies, experimentalPolicies } from 'standdown/policies';
+
+const policies = [...allPolicies, ...experimentalPolicies];
+```
+
+`amazon` is detect-only: it reports attribution for suppression visibility but
+its `activation.mode` is `never`, so the guard will never allow activation on an
+Amazon advertiser host. Integrators with their own Amazon arrangement can supply
+a policy that overrides this.
 
 See [POLICIES.md](./POLICIES.md) for citations and attribution.
 

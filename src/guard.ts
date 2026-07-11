@@ -29,15 +29,6 @@ export function guardActivation(req: {
     return { allowed: false, reason: 'missing-user-benefit' };
   }
 
-  const maxPrompts = req.policy.activation.maxPromptsPerJourney;
-
-  if (
-    maxPrompts !== undefined &&
-    (req.decision.promptCount ?? 0) >= maxPrompts
-  ) {
-    return { allowed: false, reason: 'max-prompts-exhausted' };
-  }
-
   const allowedReferrerClasses = req.policy.activation.allowedReferrerClasses;
 
   if (allowedReferrerClasses !== undefined) {

@@ -74,23 +74,6 @@ describe('guardActivation', () => {
     ).toEqual({ allowed: false, reason: 'policy-never-activates' });
   });
 
-  it('rejects eBay when prompt count is exhausted', () => {
-    expect(
-      guardActivation({
-        decision: {
-          standDown: false,
-          reason: 'no-active-standdown',
-          behaviors: [],
-          promptCount: 2,
-          referrerClass: 'direct',
-        },
-        userGesture: trustedClick,
-        benefit,
-        policy: ebayEpnPolicy,
-      }),
-    ).toEqual({ allowed: false, reason: 'max-prompts-exhausted' });
-  });
-
   it('rejects eBay when required referrer class is missing', () => {
     expect(
       guardActivation({

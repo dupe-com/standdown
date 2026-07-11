@@ -2,6 +2,7 @@ import type { Behavior, StanddownPolicy } from './types';
 
 const LAST_VERIFIED = '2026-07-10';
 const THIRTY_MINUTES_MS = 1_800_000;
+const SIXTY_MINUTES_MS = 3_600_000;
 const COC_INACTIVITY_MS = 3_600_000;
 const COC_FALLBACK_MIN_MS = 5_400_000;
 const PIE_STANDDOWN_DOMAINS_URL =
@@ -80,7 +81,7 @@ export const cjPolicy = {
   standdown: {
     scope: 'advertiser',
     sessionRule: 'session-or-min',
-    minDurationMs: THIRTY_MINUTES_MS,
+    minDurationMs: SIXTY_MINUTES_MS,
     behaviors: standdownBehaviors,
   },
   activation: { mode: 'user-click' },
@@ -88,7 +89,7 @@ export const cjPolicy = {
     sourceUrl: 'https://www.cj.com/legal/software-policy',
     lastVerified: LAST_VERIFIED,
     notes:
-      'CJ policy cites CJ domains, afsrc=1, and cjevent; rotating domain list is attributed to piedotorg/standdown-domains.',
+      'CJ policy cites CJ domains, afsrc=1, and cjevent; rotating domain list is attributed to piedotorg/standdown-domains. Minimum stand-down duration (60m) is calibrated to production enforcement (Dupe standDownCookieDuration=60).',
   },
 } as const satisfies StanddownPolicy;
 
@@ -283,14 +284,13 @@ export const ebayEpnPolicy = {
   standdown: cocDefaults,
   activation: {
     mode: 'user-click',
-    maxPromptsPerJourney: 2,
     allowedReferrerClasses: ['own-site', 'organic', 'direct'],
   },
   metadata: {
     sourceUrl: 'https://partnernetwork.ebay.com/browser-extension-policy',
     lastVerified: LAST_VERIFIED,
     notes:
-      'eBay prompt/referrer requirements are from pre-build research; landing params and rover.ebay.com are also attributed to piedotorg/standdown-domains.',
+      'eBay referrer requirements are from pre-build research; landing params and rover.ebay.com are also attributed to piedotorg/standdown-domains.',
   },
 } as const satisfies StanddownPolicy;
 
@@ -613,6 +613,12 @@ export const universalPolicy = {
   },
 } as const satisfies StanddownPolicy;
 
+/**
+ * Verified policy packs, safe to enable by default. Every entry here has a
+ * cited `metadata.sourceUrl` and detection rules attributed to a network policy
+ * or the piedotorg/standdown-domains list, and is enforced by
+ * `scripts/policies-cite-check.mjs`.
+ */
 export const allPolicies = [
   cjPolicy,
   impactPolicy,
@@ -621,15 +627,30 @@ export const allPolicies = [
   shareasalePolicy,
   ebayEpnPolicy,
   amazonPolicy,
-  sovrnSkimlinksPolicy,
-  partnerizePolicy,
   universalPolicy,
 ] as const satisfies readonly StanddownPolicy[];
+
+/**
+ * Low-confidence packs whose redirect domains are inferred from domain
+ * knowledge rather than verified against network documentation. Kept out of
+ * `allPolicies` so the default set stays trustworthy; opt in explicitly (import
+ * this array or name the pack via `policiesFor`) once you have verified them for
+ * your integration.
+ */
+export const experimentalPolicies = [
+  sovrnSkimlinksPolicy,
+  partnerizePolicy,
+] as const satisfies readonly StanddownPolicy[];
+
+const knownPolicies: readonly StanddownPolicy[] = [
+  ...allPolicies,
+  ...experimentalPolicies,
+];
 
 export function policiesFor(networks: readonly string[]): StanddownPolicy[] {
   const wanted = new Set(networks);
 
-  return allPolicies.filter(
+  return knownPolicies.filter(
     (policy) => wanted.has(policy.id) || wanted.has(policy.network.id),
   );
 }
