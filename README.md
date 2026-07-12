@@ -114,6 +114,15 @@ The content adapter collects only local page signals: `location.href`,
 included. SPA navigations are re-evaluated via `pushState`, `replaceState`, and
 `popstate` hooks.
 
+**Cookie matching is name-only, by design.** `CookiePattern` rules (`exact` and
+`substring`) match against cookie **names**, never values — that is what keeps
+user data structurally out of `Signals` (invariant I2). If you are migrating from
+an implementation that matches against the whole `document.cookie` string (names
+*and* values), verify that your cookie rules only depend on names before porting
+them; a rule that secretly relied on matching a cookie *value* will not fire here.
+This is intentional and not configurable: matching values would require cookie
+values to enter `Signals`, which the closed-signal privacy guarantee forbids.
+
 `storage: 'local-ttl'` stores session records in `localStorage` with a sliding
 24-hour envelope TTL by default. The TTL clears session records, not audit
 history; per-policy stand-down durations remain enforced by the core state
