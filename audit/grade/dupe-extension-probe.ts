@@ -1,7 +1,7 @@
 /**
- * Baseline conformance probe for Dupe's REAL browser extension (Phase 0 baseline
- * = the behavioral spec we must preserve when the standdown library is later
- * introduced as a shadow observer).
+ * Baseline conformance probe for an adopting extension's REAL browser build
+ * (Phase 0 baseline = the behavioral spec we must preserve when the standdown
+ * library is later introduced as a shadow observer).
  *
  * What it grades: does the extension ACTIVATE (paint its own attribution surface
  * onto a merchant page) when it shouldn't — i.e. when a partner already owns the
@@ -13,10 +13,10 @@
  * deleted for breaking both):
  *   1. NO hardcoded user/build paths. The extension build dir comes from EXT_PATH
  *      (env) or argv[2]. Nothing else.
- *   2. NEVER read Dupe-internal storage keys (e.g. the `__dupe__…stand-down`
+ *   2. NEVER read host-extension-internal storage keys (e.g. the `__ext__…stand-down`
  *      sessionStorage flag). The only sensors are things any user could see:
  *        (a) the extension's own UI rendered into the merchant DOM — its wxt
- *            shadow hosts (`dupe-onpage`, `dupe-price-element`, …) with real
+ *            shadow hosts (`host-onpage`, `host-price-element`, …) with real
  *            rendered content, which `standDown` gates; the host element mounts
  *            unconditionally, so we require non-empty rendered content, not mere
  *            presence, to avoid a false "activated".
@@ -25,7 +25,7 @@
  *
  * How a synthetic fixture triggers the real, merchant-keyed extension: Chromium
  * `--host-resolver-rules="MAP <merchant> 127.0.0.1"` (per merchant host, NOT a
- * catch-all — dupe.com and the real networks must still resolve so the extension
+ * catch-all — example.com and the real networks must still resolve so the extension
  * can load its live policy) + a self-signed cert whose SAN covers every merchant
  * host + `--ignore-certificate-errors`. The extension believes it is on the real
  * retailer while we serve a page we fully control. Technique shared with
@@ -66,7 +66,7 @@ if (!EXT_PATH) {
 
 /**
  * A baseline scenario. `expectActivate` encodes the Phase-0 spec:
- *   false → a partner already owns the sale (or a merchant is on Dupe's
+ *   false → a partner already owns the sale (or a merchant is on the adopter's
  *           unconditional disable list): the extension MUST stand down (paint
  *           nothing, take no affiliate action).
  *   true  → clean / allowed traffic: the extension is expected to activate.
@@ -94,7 +94,7 @@ const SCENARIOS: BaselineScenario[] = [
     id: 'rakuten:attribution:landing-param',
     networkId: 'rakuten',
     host: 'www.nordstrom.com',
-    path: '/product?ranSiteID=29T8xR4CT5-abc&ranEAID=xyz',
+    path: '/product?ranSiteID=EXAMPLESITEID-abc&ranEAID=xyz',
     expectActivate: false,
     note: 'Rakuten ranSiteID+ranEAID present → partner owns it → stand down',
   },
@@ -185,9 +185,9 @@ const SCENARIOS: BaselineScenario[] = [
     id: 'control:self-click-exemption',
     networkId: 'cj',
     host: 'www.nordstrom.com',
-    path: '/product?cjevent=abc123&cp=hello_Dupe.com',
+    path: '/product?cjevent=abc123&cp=hello_examplebrand',
     expectActivate: true,
-    note: "Dupe self-click ignore_param (cp contains _Dupe.com) clears the CJ match → activate",
+    note: "the adopter's self-click exemption (cp contains _examplebrand) clears the CJ match → activate",
   },
 ];
 
@@ -232,10 +232,10 @@ function servedByFixture(reqUrl: string, merchant: string): boolean {
 /**
  * The DOM sensor. Returns whether the extension has painted its own UI with real
  * rendered content. We look at the extension's wxt shadow hosts (custom elements
- * whose tag begins with `dupe-`, each carrying a `wxt-shadow-root`) and require
+ * whose tag begins with `host-`, each carrying a `wxt-shadow-root`) and require
  * NON-EMPTY rendered content inside the shadow root — ignoring the injected
  * <style>/<link> that wxt mounts even when React renders null under stand-down.
- * We deliberately do NOT read `window.__dupe_detection` or any sessionStorage:
+ * We deliberately do NOT read `window.__ext_detection` or any sessionStorage:
  * detection runs even while stood down, so those are not activation signals.
  */
 async function domActivated(page: Page): Promise<{ activated: boolean; detail: string }> {
@@ -243,7 +243,7 @@ async function domActivated(page: Page): Promise<{ activated: boolean; detail: s
     .evaluate(() => {
       const hosts = Array.from(document.querySelectorAll('*')).filter((el) => {
         const tag = el.tagName.toLowerCase();
-        return tag.startsWith('dupe-') || (tag.includes('dupe') && !!(el as Element & { shadowRoot?: ShadowRoot | null }).shadowRoot);
+        return tag.startsWith('host-') || (tag.includes('host') && !!(el as Element & { shadowRoot?: ShadowRoot | null }).shadowRoot);
       });
       const painted: string[] = [];
       for (const host of hosts) {
@@ -256,7 +256,7 @@ async function domActivated(page: Page): Promise<{ activated: boolean; detail: s
       }
       // Light-DOM price badges the extension injects inline next to prices.
       const badges = document.querySelectorAll(
-        '[class*="dupe-price" i],[id*="dupe-price" i],[class*="dupe-tab" i],[id*="dupe-tab" i]',
+        '[class*="host-price" i],[id*="host-price" i],[class*="host-tab" i],[id*="host-tab" i]',
       ).length;
       if (badges > 0) painted.push(`price-badge(${badges})`);
       return { activated: painted.length > 0, detail: painted.join(', ') };
@@ -354,7 +354,7 @@ function toObservation(r: ProbeResult): ScenarioObservation {
 
 async function main() {
   const hosts = [...new Set(SCENARIOS.map((s) => s.host))];
-  const dir = await mkdtemp(join(tmpdir(), 'dupe-probe-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ext-probe-'));
   const { key, cert } = makeCert(dir, hosts);
 
   const server = createServer({ key: readFileSync(key), cert: readFileSync(cert) }, (_req, res) => {
@@ -364,8 +364,8 @@ async function main() {
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const port = (server.address() as AddressInfo).port;
 
-  const userDataDir = await mkdtemp(join(tmpdir(), 'dupe-probe-profile-'));
-  // Per-host MAP (NOT `MAP * 127.0.0.1`): dupe.com and the real affiliate hosts
+  const userDataDir = await mkdtemp(join(tmpdir(), 'ext-probe-profile-'));
+  // Per-host MAP (NOT `MAP * 127.0.0.1`): example.com and the real affiliate hosts
   // must keep resolving so the extension can load its live policy and so an
   // outbound affiliate redirect is observable as a real off-fixture request.
   const resolverRules = hosts.map((h) => `MAP ${h} 127.0.0.1`).join(', ');
@@ -384,11 +384,11 @@ async function main() {
   await context.waitForEvent('serviceworker', { timeout: 6000 }).catch(() => null);
   const sw = context.serviceWorkers()[0] ?? null;
 
-  console.log(`\n  standdown — Dupe extension baseline conformance probe`);
+  console.log(`\n  standdown — host-extension baseline conformance probe`);
   console.log(`  extension: ${EXT_PATH}`);
   console.log(`  service worker: ${sw ? 'registered' : 'NONE (activation likely inconclusive)'}`);
   console.log(`  spoofed merchant hosts: ${hosts.join(', ')}`);
-  console.log(`  sensor: rendered Dupe UI in merchant DOM + affiliate-network redirect/cookie\n`);
+  console.log(`  sensor: rendered host UI in merchant DOM + affiliate-network redirect/cookie\n`);
 
   const results: ProbeResult[] = [];
   for (const scenario of SCENARIOS) {

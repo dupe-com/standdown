@@ -1,16 +1,16 @@
-# Grading the Dupe extension (Phase 0 baseline conformance)
+# Grading your own extension (Phase 0 baseline conformance)
 
 This is the operator's guide for `grade/dupe-extension-probe.ts` — the black-box
-probe that grades Dupe's **real** browser extension against its Phase-0 baseline:
+probe that grades a host extension's **real** browser build against its Phase-0 baseline:
 the behavioral spec we must preserve before the `standdown` library is introduced
 as a shadow observer.
 
-The probe is strictly black-box. It never reads Dupe-internal storage keys and
+The probe is strictly black-box. It never reads adopter-internal storage keys and
 contains **no hardcoded build path** — you supply the extension build directory
 yourself. It judges only what a user could see:
 
 1. the extension painting its own UI into a merchant page (its wxt shadow hosts
-   `dupe-onpage` / `dupe-price-element`, with real rendered content — which the
+   `host-onpage` / `host-price-element`, with real rendered content — which the
    extension's `standDown` decision gates), and
 2. any outbound affiliate-network action (redirect / cookie), classified with the
    shared policy-pack fingerprint in `fixtures/fingerprint.ts`.
@@ -34,18 +34,18 @@ a page we control. The baseline spec encoded in the probe:
 | Clean merchant, no attribution | nordstrom | **activate** (allowed to earn) |
 | Amazon | amazon.com | **activate** (`ALLOW_AMAZON=true`) |
 | Wayfair | wayfair.com | **activate** (filtered out of client policy) |
-| Self-click `cp=…_Dupe.com` over a CJ param | nordstrom | **activate** (ignore_param clears the match) |
+| Self-click `cp=…_examplebrand` over a CJ param | nordstrom | **activate** (ignore_param clears the match) |
 
 The result is scored with the shared rubric (`grade/rubric.ts`): an F→A+ letter,
 plus the **inert cap** — see "Reading the result" below.
 
-## 1. Build the Dupe extension
+## 1. Build the extension
 
-The extension is a [wxt](https://wxt.dev) project. From the extension package
-(`apps/extension` in the dupe-com repo):
+The extension is a [wxt](https://wxt.dev) project. From your extension's package
+(e.g. `apps/extension`):
 
 ```bash
-cd /path/to/dupe-com/apps/extension
+cd /path/to/your-extension
 
 # Node 20.11.1 is pinned in .nvmrc
 nvm use            # or: fnm use
@@ -85,11 +85,11 @@ first CLI arg — nothing is hardcoded:
 
 ```bash
 # from standdown/audit
-EXT_PATH="/path/to/dupe-com/apps/extension/.output/chrome-mv3" \
+EXT_PATH="/path/to/your-extension/.output/chrome-mv3" \
   npx tsx grade/dupe-extension-probe.ts
 
 # equivalently, as a positional arg:
-npx tsx grade/dupe-extension-probe.ts /path/to/dupe-com/apps/extension/.output/chrome-mv3
+npx tsx grade/dupe-extension-probe.ts /path/to/your-extension/.output/chrome-mv3
 ```
 
 Useful env vars:
@@ -101,17 +101,17 @@ Useful env vars:
 Example shape of the output:
 
 ```
-  standdown — Dupe extension baseline conformance probe
+  standdown — host-extension baseline conformance probe
   extension: /…/.output/chrome-mv3
   service worker: registered
   spoofed merchant hosts: www.nordstrom.com, www.ebay.com, …
-  sensor: rendered Dupe UI in merchant DOM + affiliate-network redirect/cookie
+  sensor: rendered extension UI in merchant DOM + affiliate-network redirect/cookie
 
   [ok  ] rakuten:attribution:landing-param    no observable activation
   [ok  ] cj:attribution:landing-param         no observable activation
-  [HIJACK] impact:attribution:landing-param   activated: ui[dupe-onpage(3)]
+  [HIJACK] impact:attribution:landing-param   activated: ui[host-onpage(3)]
   …
-  [ok  ] control:clean-merchant               activated: ui[dupe-price-element(5)]
+  [ok  ] control:clean-merchant               activated: ui[host-price-element(5)]
 
   standdown grade: B  (83/100)
   Hijacked 1/8 scenarios where attribution already existed.
