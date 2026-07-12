@@ -1,6 +1,6 @@
 {
   "name": "standdown",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Affiliate stand-down, done right, for browser extensions.",
   "author": "Dupe (https://dupe.com)",
   "repository": {
