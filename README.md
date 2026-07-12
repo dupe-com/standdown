@@ -101,6 +101,46 @@ npm install standdown
 `standdown` is published to npm and versioned with semver from `0.1.0`. Releases
 are cut by a human; the repo does not publish from CI.
 
+## Set it up with an AI agent
+
+The fastest path: hand the whole integration to your coding agent. Copy this
+prompt into Claude Code, Cursor, Copilot, etc. — pointed at your extension's repo:
+
+```text
+Integrate the `standdown` npm library into this browser extension so it stops
+hijacking affiliate attribution when a partner already owns the sale. Follow the
+official guide at https://raw.githubusercontent.com/dupe-com/standdown/main/AGENTS.md.
+
+Do the full loop:
+1. `npm install standdown`.
+2. Pick the adapter: `standdown/webext` for a Chromium MV3 extension, or
+   `standdown/content` for Safari / content-script-only.
+3. Find every place this extension fires affiliate attribution (redirects, link
+   rewrites, cookie writes) and gate each behind the stand-down decision — do
+   nothing when `decision.standDown` is true.
+4. Bundle per examples/mv3-extension (subpath imports don't resolve raw in
+   extension contexts).
+5. Build the unpacked extension, then grade it:
+   git clone https://github.com/dupe-com/standdown && cd standdown/audit && \
+     npm install && npx tsx grade/grade.ts <path-to-unpacked-extension>
+   Report the letter grade and fix anything below A.
+
+Preserve the invariants: decisions stay local and synchronous (no network in the
+decision path), no user identity in signals, and fail toward standing down.
+```
+
+**Already have homegrown stand-down logic?** Use the brownfield prompt in
+[`ADOPTING.md`](./ADOPTING.md) instead — it migrates your existing decision path
+onto the library provably, without risking revenue in the switch.
+
+**Claude Code users** can skip the prompt: this repo ships two skills in
+[`.claude/skills/standdown`](./.claude/skills/standdown) (greenfield install) and
+[`skills/adopt-standdown`](./skills/adopt-standdown) (brownfield migration). Copy
+the one you want into your project's `.claude/skills/` (or `~/.claude/skills/`)
+and run `/standdown` (or `/adopt-standdown`). Agents that read
+[`AGENTS.md`](./AGENTS.md) or
+[`llms.txt`](./llms.txt) get the same playbook automatically.
+
 ## Webext Quickstart
 
 ```ts
