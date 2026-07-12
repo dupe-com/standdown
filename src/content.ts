@@ -44,6 +44,13 @@ export interface CreateContentStanddownOptions {
   readonly window?: ContentWindowLike;
   readonly now?: () => number;
   readonly auditLog?: boolean;
+  /**
+   * How long a `selfPatterns` match suppresses stand-down for its advertiser
+   * host. `'policy'` (default) exempts only the navigation carrying the param;
+   * `'session'` persists the exemption for the host across later param-less
+   * navigations (Dupe's `ignore_param` semantics).
+   */
+  readonly selfExemptionScope?: 'policy' | 'session';
   readonly onDecision?: (decision: Decision, signals: Signals) => void;
 }
 
@@ -88,10 +95,7 @@ export function createContentStanddown(
   const windowLike = opts.window ?? currentWindow();
   const now = opts.now ?? Date.now;
   const store = opts.store ?? createContentStore(windowLike, opts, now);
-  const session = new StanddownSession(
-    store,
-    opts.auditLog === undefined ? undefined : { auditLog: opts.auditLog },
-  );
+  const session = new StanddownSession(store, contentSessionOptions(opts));
 
   let disposed = false;
   let pending = false;
@@ -245,6 +249,27 @@ export function cookieNamesFromString(cookie: string): string[] {
     .filter((part) => part.length > 0)
     .map((part) => part.split('=')[0]?.trim() ?? '')
     .filter((name) => name.length > 0);
+}
+
+function contentSessionOptions(
+  opts: CreateContentStanddownOptions,
+):
+  | { auditLog?: boolean; selfExemptionScope?: 'policy' | 'session' }
+  | undefined {
+  const sessionOpts: {
+    auditLog?: boolean;
+    selfExemptionScope?: 'policy' | 'session';
+  } = {};
+
+  if (opts.auditLog !== undefined) {
+    sessionOpts.auditLog = opts.auditLog;
+  }
+
+  if (opts.selfExemptionScope !== undefined) {
+    sessionOpts.selfExemptionScope = opts.selfExemptionScope;
+  }
+
+  return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;
 }
 
 function createContentStore(

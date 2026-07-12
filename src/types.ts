@@ -133,6 +133,11 @@ export interface MatchedRule {
   sourceUrl: string;
 }
 
+export interface SelfExemptScope {
+  policyId: string;
+  networkId: string;
+}
+
 export interface Detection {
   matched: MatchedRule[];
   selfMatch: boolean;
@@ -148,6 +153,12 @@ export interface Detection {
     advertiserHost: string;
     reason: string;
   };
+  /**
+   * Policy/network scopes for which a scoped self-exemption matched this
+   * navigation. Used by `selfExemptionScope: 'session'` to persist the
+   * exemption for the advertiser host across later param-less navigations.
+   */
+  selfExemptScopes?: readonly SelfExemptScope[];
   failClosedReason?: string;
 }
 
@@ -199,9 +210,24 @@ export interface SessionRecord {
   behaviors: Behavior[];
 }
 
+/**
+ * A session-scoped self-exemption grant for one advertiser host: the integrator's
+ * own attribution (via `selfPatterns`) was seen for these policies/networks, so
+ * later navigations to the host re-apply the exemption for those same scopes.
+ * Held for the lifetime of the session state; never lifts an already-active
+ * stand-down and never covers a `disabled-host` match.
+ */
+export interface ExemptionRecord {
+  advertiserHost: string;
+  policyIds: string[];
+  networkIds: string[];
+  grantedAt: number;
+}
+
 export interface StanddownState {
   sessions: Record<string, SessionRecord>;
   auditLog: AuditEntry[];
+  exemptions?: Record<string, ExemptionRecord>;
 }
 
 export interface StateStore {

@@ -104,7 +104,11 @@ function detect(signals: Signals, policies: StanddownPolicy[]): Detection
 
 // State machine over a pluggable store.
 class StanddownSession {
-  constructor(store: StateStore, opts?: { auditLog?: boolean })  // auditLog default TRUE
+  // auditLog default TRUE; selfExemptionScope default 'policy'
+  constructor(store: StateStore, opts?: {
+    auditLog?: boolean
+    selfExemptionScope?: 'policy' | 'session'
+  })
   async ingest(signals: Signals, policies: StanddownPolicy[]): Promise<Decision>
   async shouldStandDown(advertiserHost: string, now: number): Promise<Decision>
   async recordActivity(now: number): Promise<void>               // feeds inactivity windows
@@ -133,6 +137,23 @@ function verifyPolicyBundle(current: StanddownPolicy[], update: SignedBundle, pu
 ```
 
 `StateStore` interface + three implementations: in-memory (tests), `webext` chrome.storage.local adapter, `content` sessionStorage/localStorage-TTL adapter.
+
+### Self-exemption scope
+
+A `selfPatterns` match means the current attribution is the integrator's own, so
+the library does not stand down against that network. `selfExemptionScope`
+governs how long that lasts:
+
+- `'policy'` (default) — exempts only the navigation carrying the param.
+- `'session'` — persists the exemption for the advertiser host and re-applies it
+  to the *same network's* signals on later param-less navigations (Dupe's
+  `ignore_param`). Stored in `StanddownState.exemptions[host]` as
+  `{ policyIds, networkIds, grantedAt }`, held for the session's lifetime.
+
+Session-scope invariants: it is network-precise (a different network on the same
+host still stands down); it never lifts an already-active stand-down (no
+exemption is recorded while one is active — monotone toward suppression); and a
+`disableHosts` match is never exempted.
 
 ### webext adapter
 

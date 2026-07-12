@@ -3,6 +3,7 @@ import type {
   AuditEntry,
   Decision,
   Detection,
+  ExemptionRecord,
   SessionRecord,
   Signals,
   StanddownPolicy,
@@ -31,15 +32,29 @@ export class StanddownSession {
   readonly #store: StateStore;
   readonly #auditLog: boolean;
   readonly #maxAuditEntries: number;
+  readonly #selfExemptionScope: 'policy' | 'session';
   readonly #readOnlyAuditLog: AuditEntry[] = [];
 
   constructor(
     store: StateStore,
-    opts?: { auditLog?: boolean; maxAuditEntries?: number },
+    opts?: {
+      auditLog?: boolean;
+      maxAuditEntries?: number;
+      /**
+       * How long a `selfPatterns` match suppresses stand-down for its
+       * advertiser host. `'policy'` (default) exempts only the navigation that
+       * carries the param. `'session'` persists the exemption for the host and
+       * re-applies it to that same network's detections on later param-less
+       * navigations — Dupe's `ignore_param` semantics. A session exemption never
+       * lifts an already-active stand-down and never covers a `disabled-host`.
+       */
+      selfExemptionScope?: 'policy' | 'session';
+    },
   ) {
     this.#store = store;
     this.#auditLog = opts?.auditLog ?? true;
     this.#maxAuditEntries = Math.max(0, opts?.maxAuditEntries ?? 1_000);
+    this.#selfExemptionScope = opts?.selfExemptionScope ?? 'policy';
   }
 
   async ingest(
@@ -74,30 +89,41 @@ export class StanddownSession {
     return this.#withState(signals.now, (state) => {
       pruneExpiredSessions(state, signals.now);
 
-      if (detection.strongest) {
-        const matchedPolicies = policiesForDetection(policies, detection);
+      let effective = detection;
+
+      if (this.#selfExemptionScope === 'session' && advertiserHost) {
+        recordSessionExemptions(state, advertiserHost, detection, signals.now);
+        effective = applySessionExemptions(
+          advertiserHost,
+          detection,
+          state.exemptions?.[advertiserHost],
+        );
+      }
+
+      if (effective.strongest) {
+        const matchedPolicies = policiesForDetection(policies, effective);
 
         if (matchedPolicies.length === 0) {
           return {
             decision: failClosedDecision('matched-policy-missing'),
-            detection,
+            detection: effective,
           };
         }
 
         const record = upsertSessionRecord(
           state,
-          detection.strongest.advertiserHost,
-          detection.strongest.policyId,
+          effective.strongest.advertiserHost,
+          effective.strongest.policyId,
           matchedPolicies,
           signals.now,
         );
 
         return {
           decision: decisionFromRecord(record, signals.now, {
-            reason: detection.strongest.reason,
+            reason: effective.strongest.reason,
             referrerClass: classifyReferrer(signals, record.advertiserHost),
           }),
-          detection,
+          detection: effective,
         };
       }
 
@@ -105,21 +131,27 @@ export class StanddownSession {
         ? activeDecisionForHost(state, advertiserHost, signals.now)
         : undefined;
 
+      // A session exemption filtered out what would otherwise have stood down.
+      const sessionExempted =
+        detection.strongest !== undefined && effective.strongest === undefined;
+
       return {
         decision:
           activeDecision ??
           ({
             standDown: false,
-            reason: detection.selfMatch
-              ? 'self-exempted-no-active-standdown'
-              : 'no-active-standdown',
+            reason: sessionExempted
+              ? 'self-exempted-session'
+              : detection.selfMatch
+                ? 'self-exempted-no-active-standdown'
+                : 'no-active-standdown',
             behaviors: [],
             referrerClass: advertiserHost
               ? classifyReferrer(signals, advertiserHost)
               : 'other',
             ...(signals.signalCoverage === 'partial' ? { degraded: true } : {}),
           } satisfies Decision),
-        detection,
+        detection: effective,
       };
     }, 'ingest');
   }
@@ -361,6 +393,108 @@ function upsertSessionRecord(
   return baseRecord;
 }
 
+/**
+ * Persist scoped self-exemptions seen on this navigation for the host, so later
+ * param-less navigations re-apply them. Monotone: never grant an exemption while
+ * a stand-down is already active for the host (that would reduce existing
+ * suppression, which a self-exemption may never do).
+ */
+function recordSessionExemptions(
+  state: StanddownState,
+  advertiserHost: string,
+  detection: Detection,
+  now: number,
+): void {
+  const scopes = detection.selfExemptScopes;
+
+  if (!scopes || scopes.length === 0) {
+    return;
+  }
+
+  if (activeDecisionForHost(state, advertiserHost, now) !== undefined) {
+    return;
+  }
+
+  const key = normalizeHost(advertiserHost);
+
+  if (state.exemptions === undefined) {
+    state.exemptions = {};
+  }
+
+  const exemptions = state.exemptions;
+  const existing = exemptions[key];
+  const policyIds = new Set(existing?.policyIds ?? []);
+  const networkIds = new Set(existing?.networkIds ?? []);
+
+  for (const scope of scopes) {
+    policyIds.add(scope.policyId);
+    networkIds.add(scope.networkId);
+  }
+
+  exemptions[key] = {
+    advertiserHost: key,
+    policyIds: [...policyIds],
+    networkIds: [...networkIds],
+    grantedAt: existing?.grantedAt ?? now,
+  };
+}
+
+/**
+ * Re-apply a host's persisted session exemptions: drop matched rules whose
+ * policy/network was exempted for this host, then recompute the strongest match.
+ * `disabled-host` matches are never dropped — a hard-disabled host stands down
+ * regardless of any self-exemption.
+ */
+function applySessionExemptions(
+  advertiserHost: string,
+  detection: Detection,
+  record: ExemptionRecord | undefined,
+): Detection {
+  if (!record) {
+    return detection;
+  }
+
+  const host = normalizeHost(advertiserHost);
+  const policyIds = new Set(record.policyIds);
+  const networkIds = new Set(record.networkIds);
+
+  const filtered = detection.matched.filter((match) => {
+    if (match.kind === 'disabled-host') {
+      return true;
+    }
+
+    if (normalizeHost(match.advertiserHost) !== host) {
+      return true;
+    }
+
+    return !(policyIds.has(match.policyId) || networkIds.has(match.networkId));
+  });
+
+  if (filtered.length === detection.matched.length) {
+    return detection;
+  }
+
+  const strongest = filtered[0]
+    ? {
+        policyId: filtered[0].policyId,
+        advertiserHost: filtered[0].advertiserHost,
+        reason: filtered[0].reason,
+      }
+    : undefined;
+
+  const next: Detection = { matched: filtered, selfMatch: detection.selfMatch };
+
+  if (strongest) {
+    next.strongest = strongest;
+  }
+
+  if (detection.selfExemptScopes) {
+    next.selfExemptScopes = detection.selfExemptScopes;
+  }
+
+  return next;
+}
+
 function policiesForDetection(
   policies: readonly StanddownPolicy[],
   detection: Detection,
@@ -503,7 +637,7 @@ function auditEntry(value: {
 }
 
 function cloneState(state: StanddownState): StanddownState {
-  return {
+  const cloned: StanddownState = {
     sessions: Object.fromEntries(
       Object.entries(state.sessions).map(([host, record]) => [
         host,
@@ -515,6 +649,21 @@ function cloneState(state: StanddownState): StanddownState {
     ),
     auditLog: state.auditLog.map(cloneAuditEntry),
   };
+
+  if (state.exemptions) {
+    cloned.exemptions = Object.fromEntries(
+      Object.entries(state.exemptions).map(([host, record]) => [
+        host,
+        {
+          ...record,
+          policyIds: [...record.policyIds],
+          networkIds: [...record.networkIds],
+        },
+      ]),
+    );
+  }
+
+  return cloned;
 }
 
 function cloneAuditEntry(entry: AuditEntry): AuditEntry {
@@ -535,6 +684,12 @@ function cloneAuditEntry(entry: AuditEntry): AuditEntry {
 
     if (entry.detection.strongest !== undefined) {
       detection.strongest = { ...entry.detection.strongest };
+    }
+
+    if (entry.detection.selfExemptScopes !== undefined) {
+      detection.selfExemptScopes = entry.detection.selfExemptScopes.map(
+        (scope) => ({ ...scope }),
+      );
     }
 
     if (entry.detection.failClosedReason !== undefined) {
