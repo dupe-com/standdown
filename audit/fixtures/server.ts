@@ -23,18 +23,25 @@ import { servedFor, type Mechanism } from './packDerive.ts';
 
 const KINDS: readonly Mechanism[] = ['landing-param', 'cookie', 'redirect', 'afsrc'];
 
-const policyByNetwork = new Map<string, StanddownPolicy>(
-  allPolicies.map((policy) => [policy.network.id, policy]),
-);
+type PolicyMap = ReadonlyMap<string, StanddownPolicy>;
 
 export interface FixtureServer {
   url: string;
   close(): Promise<void>;
 }
 
-/** Boot the fixture server on 127.0.0.1:0 and resolve its base URL + closer. */
-export function createFixtureServer(): Promise<FixtureServer> {
-  const server = http.createServer((req, res) => handle(req, res));
+/**
+ * Boot the fixture server on 127.0.0.1:0 and resolve its base URL + closer.
+ * Routes are keyed by the given policies (defaults to standdown's bundled packs);
+ * pass a consumer's packs to serve their networks instead.
+ */
+export function createFixtureServer(
+  policies: readonly StanddownPolicy[] = allPolicies,
+): Promise<FixtureServer> {
+  const policyByNetwork: PolicyMap = new Map(
+    policies.map((policy) => [policy.network.id, policy]),
+  );
+  const server = http.createServer((req, res) => handle(req, res, policyByNetwork));
 
   return new Promise((resolve, reject) => {
     server.on('error', reject);
@@ -52,16 +59,20 @@ export function createFixtureServer(): Promise<FixtureServer> {
   });
 }
 
-function handle(req: http.IncomingMessage, res: http.ServerResponse): void {
+function handle(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  policyByNetwork: PolicyMap,
+): void {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
   const merchant = url.pathname.match(/^\/merchant\/([^/]+)$/);
   const aff = url.pathname.match(/^\/aff\/([^/]+)$/);
 
   if (merchant) {
-    return serveMerchant(res, decodeURIComponent(merchant[1]), url.searchParams);
+    return serveMerchant(res, decodeURIComponent(merchant[1]), url.searchParams, policyByNetwork);
   }
   if (aff) {
-    return serveAff(res, decodeURIComponent(aff[1]), url.searchParams);
+    return serveAff(res, decodeURIComponent(aff[1]), url.searchParams, policyByNetwork);
   }
 
   res.writeHead(404, { 'content-type': 'text/plain' });
@@ -72,6 +83,7 @@ function serveMerchant(
   res: http.ServerResponse,
   network: string,
   params: URLSearchParams,
+  policyByNetwork: PolicyMap,
 ): void {
   const policy = policyByNetwork.get(network);
   if (!policy) {
@@ -112,6 +124,7 @@ function serveAff(
   res: http.ServerResponse,
   network: string,
   query: URLSearchParams,
+  policyByNetwork: PolicyMap,
 ): void {
   const policy = policyByNetwork.get(network);
   if (!policy) {

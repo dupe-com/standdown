@@ -60,6 +60,24 @@ letter grade. The scenarios in `fixtures/scenarios.ts` are derived from the same
 policy packs the library ships, so a high grade means your extension stands down
 on the attribution `standdown` knows how to detect.
 
+### Grading against your own policy pack
+
+By default the grader uses standdown's bundled packs (`allPolicies`). To grade
+against **your own** policy pack — the usual case once you've adopted the library
+with custom or overridden policies — point `POLICY_PACK` at a module that exports
+your policies:
+
+```sh
+POLICY_PACK=./my-packs.ts npx tsx grade/grade.ts /path/to/your/unpacked-extension
+```
+
+The module may export the `StanddownPolicy[]` as its default export, or as a
+named `policies` / `allPolicies` export. Because the entire scenario matrix and
+expected decisions are **derived from the packs**, supplying your policy is all
+that's needed — no affiliate identifiers or scenarios are hardcoded on this path.
+(The module must be resolvable by `tsx`, i.e. run this from a project where your
+pack and its imports resolve — normally your own repo.)
+
 > **Scope of the activation sensor.** The grader detects an "activation" as a
 > request to the fixture's own affiliate endpoint (`/aff/…?actor=`) — the shape
 > the reference extensions use. It reliably catches **hijacks** (competing

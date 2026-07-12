@@ -9,6 +9,8 @@
  * the extension's action unambiguous and timing-independent vs. the seed.
  */
 import type { BrowserContext } from 'playwright';
+import type { StanddownPolicy } from 'standdown';
+import { allPolicies } from 'standdown/policies';
 import { createFixtureServer, type FixtureServer } from '../fixtures/server.ts';
 import { buildScenarios, type Scenario } from '../fixtures/scenarios.ts';
 
@@ -103,9 +105,10 @@ async function runScenario(
 
 export async function runAudit(
   context: BrowserContext,
+  policies: readonly StanddownPolicy[] = allPolicies,
 ): Promise<{ observations: ScenarioObservation[]; server: FixtureServer }> {
-  const server = await createFixtureServer();
-  const scenarios = buildScenarios().slice(0, LIMIT);
+  const server = await createFixtureServer(policies);
+  const scenarios = buildScenarios(policies).slice(0, LIMIT);
   const observations: ScenarioObservation[] = [];
   let consecutiveSkips = 0;
   for (const scenario of scenarios) {
