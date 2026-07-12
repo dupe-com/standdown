@@ -59,8 +59,13 @@ function makeCert(dir: string, host: string) {
 
 interface BgTab { url: string; navs: string[]; affiliate: Array<{ url: string; network: string }> }
 
-function hostOf(u: string): string { try { return new URL(u).host; } catch { return ''; } }
-function onMerchant(u: string): boolean { const h = hostOf(u); return h.includes(MERCHANT) || h.startsWith('127.0.0.1'); }
+function hostnameOf(u: string): string { try { return new URL(u).hostname; } catch { return ''; } }
+// Exact-hostname match (no port, no substring) so an unrelated host that merely
+// contains the merchant string isn't misclassified as the fixture/merchant page.
+function onMerchant(u: string): boolean {
+  const h = hostnameOf(u);
+  return h === MERCHANT || h === '127.0.0.1' || h === 'localhost';
+}
 
 /** Attach listeners that record a background tab's navigations + affiliate hits.
  * Only requests to NON-merchant hosts can be affiliate actions — a merchant page

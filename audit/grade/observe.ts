@@ -35,6 +35,13 @@ if (!EXT_PATH) {
   process.exit(2);
 }
 
+/** Exact-hostname match for the spoofed merchant + local fixture aliases — never a
+ * substring of `.host` (which would also fold in the port and match unrelated
+ * hosts that merely contain the merchant string). */
+function isFixtureHost(hostname: string): boolean {
+  return hostname === MERCHANT || hostname === '127.0.0.1' || hostname === 'localhost';
+}
+
 const PRODUCT_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Product</title><meta property="og:type" content="product">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"Product",
@@ -109,19 +116,24 @@ async function main() {
     page.on('request', (r) => {
       const u = r.url();
       let host = '';
-      try { host = new URL(u).host; allHosts.add(host); } catch { /* ignore */ }
+      try { host = new URL(u).hostname; allHosts.add(host); } catch { /* ignore */ }
       // An EXTENSION affiliate action is an outbound request to a known affiliate
       // NETWORK host — NOT our merchant page echoing its own seeded query string.
-      // Exclude the merchant/fixture host so the pre-seeded ?ranSiteID on the
-      // landing URL isn't miscounted as the extension redirecting.
-      const onMerchant = host.includes(MERCHANT) || host.startsWith('127.0.0.1');
-      if (onMerchant) return;
+      // Exclude the merchant/fixture host (exact hostname) so the pre-seeded
+      // ?ranSiteID on the landing URL isn't miscounted as the extension redirecting.
+      if (isFixtureHost(host)) return;
       const fp = isAffiliateRedirect(u);
       if (fp.match) affiliateHits.push({ url: u.slice(0, 120), network: fp.networkId ?? '?' });
     });
     page.on('response', async (resp) => {
-      const sc = await resp.headerValue('set-cookie').catch(() => null);
-      if (sc) for (const name of cookieNames) if (sc.toLowerCase().includes(name.toLowerCase())) affiliateCookies.push(name);
+      // Set-Cookie can appear multiple times; match on the cookie NAME (before
+      // '='), not a substring of the whole header (which could hit a value).
+      const headers = await resp.headersArray().catch(() => []);
+      for (const h of headers) {
+        if (h.name.toLowerCase() !== 'set-cookie') continue;
+        const cookieName = h.value.split('=', 1)[0]!.trim().toLowerCase();
+        for (const name of cookieNames) if (cookieName === name.toLowerCase()) affiliateCookies.push(name);
+      }
     });
     const reqLog: string[] = [];
     const consoleLog: string[] = [];
@@ -138,7 +150,7 @@ async function main() {
     console.log(`     affiliate redirects: ${affiliateHits.length ? affiliateHits.map((h) => `${h.network}(${h.url})`).join(', ') : 'none'}`);
     console.log(`     affiliate cookies set: ${affiliateCookies.length ? [...new Set(affiliateCookies)].join(', ') : 'none'}`);
     // Non-fixture hosts the extension reached out to (its own backend / networks)
-    const external = [...allHosts].filter((h) => !h.includes(MERCHANT) && !h.startsWith('127.0.0.1'));
+    const external = [...allHosts].filter((h) => !isFixtureHost(h));
     console.log(`     external hosts: ${external.length ? external.slice(0, 8).join(', ') : 'none'}`);
     if (process.env.VERBOSE) {
       const injected = await page.evaluate(() =>

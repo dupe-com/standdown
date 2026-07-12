@@ -220,8 +220,10 @@ function makeCert(dir: string, hosts: readonly string[]): { key: string; cert: s
  * being miscounted as the extension taking an affiliate action. */
 function servedByFixture(reqUrl: string, merchant: string): boolean {
   try {
-    const h = new URL(reqUrl).host;
-    return h.includes(merchant) || h.startsWith('127.0.0.1');
+    // Exact hostname (no port, no substring) so an unrelated host that merely
+    // contains the merchant string isn't treated as fixture-served.
+    const h = new URL(reqUrl).hostname;
+    return h === merchant || h === '127.0.0.1' || h === 'localhost';
   } catch {
     return false;
   }
@@ -301,8 +303,14 @@ async function runScenario(
     if (fp.match) affiliateHits.push(`${fp.networkId}(${new URL(u).host})`);
   });
   page.on('response', async (resp) => {
-    const sc = await resp.headerValue('set-cookie').catch(() => null);
-    if (sc) for (const name of cookieNames) if (sc.toLowerCase().includes(name.toLowerCase())) affiliateCookies.push(name);
+    // Set-Cookie can appear multiple times; match on the cookie NAME (before '='),
+    // not a substring of the whole header (which could hit a value).
+    const headers = await resp.headersArray().catch(() => []);
+    for (const h of headers) {
+      if (h.name.toLowerCase() !== 'set-cookie') continue;
+      const cookieName = h.value.split('=', 1)[0]!.trim().toLowerCase();
+      for (const name of cookieNames) if (cookieName === name.toLowerCase()) affiliateCookies.push(name);
+    }
   });
 
   const url = `https://${scenario.host}:${port}${scenario.path}`;
