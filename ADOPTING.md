@@ -24,7 +24,7 @@ The migration runs in five phases:
 4. **GUARD** — hold the library's invariants as hard constraints the whole way.
 5. **VERIFY** — characterization tests, the audit grade, and no-fail-open assertions before you delete anything.
 
-Throughout, the worked example is the real **Dupe** migration: a browser
+Throughout, the worked example is a real migration: a browser
 extension whose server-driven stand-down policy covered CJ, Rakuten, Impact,
 eBay, and a handful of merchant blocks (Home Depot, AliExpress, Shein), with
 `ignore_param` self-exemption and a whole-cookie-string matcher.
@@ -58,7 +58,7 @@ extension):
 - **where** it lives (file:line), and
 - any **TTL / persistence** (session flag? cookie duration? nothing?).
 
-Worked example (Dupe): the sweep surfaced a server-fetched policy plus a
+Worked example (an adopting extension): the sweep surfaced a server-fetched policy plus a
 hand-copied `FALLBACK_POLICY` in the background worker, a `standDownHelper.ts`
 that lowercased the **entire** `document.cookie` string and did `.includes()`,
 an `ignore_param` self-exemption per network, a `standDownCookieDuration` of 60
@@ -91,7 +91,7 @@ new logic. Map each inventory row to exactly one library concept.
 | Per-network minimum stand-down window (`standDownCookieDuration`) | `standdown.minDurationMs` with `sessionRule:'session-or-min'` | Calibrate to the production number. |
 | Session vs persisted stand-down | adapter `storage: 'session'` \| `'local-ttl'` | `local-ttl` survives a `sessionStorage` clear within a sliding 24h envelope. |
 
-### Worked example: the Dupe config
+### Worked example: an adopting extension's config
 
 The inventory mapped cleanly onto the bundled packs plus one custom
 merchant-block policy:
@@ -102,8 +102,8 @@ import { cjPolicy, impactPolicy, rakutenPolicy, ebayEpnPolicy } from 'standdown/
 
 // disable_domains -> a custom policy carrying ONLY detection.disableHosts.
 // (...id, network, standdown, activation, metadata omitted for brevity...)
-const dupeMerchantBlocks = {
-  // id: 'dupe-merchant-blocks', network: {...}, standdown: {...}, activation: {...}, metadata: {...},
+const hostMerchantBlocks = {
+  // id: 'host-merchant-blocks', network: {...}, standdown: {...}, activation: {...}, metadata: {...},
   detection: {
     disableHosts: [
       { pattern: '(^|\\.)ebay\\.[a-z.]+$', kind: 'regex' }, // replaces disable_domains ['ebay.com','ebay.']
@@ -117,15 +117,15 @@ const dupeMerchantBlocks = {
 } as const;
 
 const standdown = createContentStanddown({
-  policies: [cjPolicy, impactPolicy, rakutenPolicy, ebayEpnPolicy, dupeMerchantBlocks],
+  policies: [cjPolicy, impactPolicy, rakutenPolicy, ebayEpnPolicy, hostMerchantBlocks],
   selfPatterns: [
-    { name: 'ranSiteID', value: '29T8xR4CT5s', match: 'contains', networkId: 'rakuten' },
-    { name: 'cp', value: '_Dupe.com', match: 'contains', networkId: 'cj' },
-    { name: 'PID', value: 'CJ101182502', match: 'equals', networkId: 'cj' },
-    { name: 'PID', value: 'CJ101145680', match: 'equals', networkId: 'cj' },
+    { name: 'ranSiteID', value: 'EXAMPLESITEID', match: 'contains', networkId: 'rakuten' },
+    { name: 'cp', value: '_examplebrand', match: 'contains', networkId: 'cj' },
+    { name: 'PID', value: 'CJ0000000001', match: 'equals', networkId: 'cj' },
+    { name: 'PID', value: 'CJ0000000002', match: 'equals', networkId: 'cj' },
   ],
-  selfExemptionScope: 'policy', // per-navigation, faithful to Dupe's ignore_param — NEVER 'session' here
-  publisherSites: ['dupe.com'],
+  selfExemptionScope: 'policy', // per-navigation, faithful to the adopter's ignore_param — NEVER 'session' here
+  publisherSites: ['example.com'],
   storage: 'session',           // or 'local-ttl' to honor CJ's 60-minute minDurationMs across a sessionStorage clear
   auditLog: true,
   onDecision: (d) => {/* namespaced shadow key / analytics only — see Phase 3 */},
@@ -139,15 +139,15 @@ Notes that generalize to any migration:
   AliExpress, and Shein each become a `suffix` rule; a suffix rule already
   matches subdomains, so `shein.com` covers `m.shein.com` with no extra entry.
 - **`ignore_param` maps to `selfPatterns`, and the scope is the whole ballgame.**
-  Dupe's `ignore_param` was *per-navigation*, so `selfExemptionScope: 'policy'`
-  (the default) is faithful. `'session'` would add self-click stickiness Dupe
+  The adopter's `ignore_param` was *per-navigation*, so `selfExemptionScope: 'policy'`
+  (the default) is faithful. `'session'` would add self-click stickiness the adopter
   never had and could let the extension **activate** on a later param-less visit
-  where Dupe stood down — a more-permissive change that hijacks a sale. Only use
+  where the adopter stood down — a more-permissive change that hijacks a sale. Only use
   `'session'` if the homegrown code actually persisted the exemption.
 - **Match the current fleet, not the "complete" library.** The bundled
   `amazonPolicy` always stands down on Amazon; if the extension currently stays
   *active* on Amazon (`ALLOW_AMAZON=true`), **exclude** it. Same for any host the
-  extension deliberately still operates on (Dupe's retired Wayfair block): omit
+  extension deliberately still operates on (an adopter's retired Wayfair block): omit
   the `disableHosts` entry until the business decides to reinstate it. Broader
   bundled packs (`universal`, `awin`, `shareasale`) are safe-stricter but will
   disagree with current behavior a lot — keep them **opt-in** for the first cut.
@@ -186,7 +186,7 @@ it once it agrees with reality on purpose.
      driven to zero before cutover**, usually by adding a `disableHosts` entry or
      tightening a `selfPattern`.
    - **needs-human-decision** — a genuine behavior change with a business
-     tradeoff (see the Dupe cases below). Escalate; do not silently pick.
+     tradeoff (see the adopter cases below). Escalate; do not silently pick.
 
 4. **Flagged cutover.** Only once dangerous-more-permissive divergences are zero
    and the grade is ≥ baseline: move the real decision behind an
@@ -198,10 +198,10 @@ it once it agrees with reality on purpose.
    production and stable do you remove the homegrown logic. Until then it stays
    as the instant rollback.
 
-### Worked example: the divergences Dupe had to reconcile
+### Worked example: the divergences an adopter had to reconcile
 
 - **Cookie name-vs-value (safe-stricter, accepted).** The old matcher hit on a
-  cookie **name or value**; `standdown` matches **names only**. Both live Dupe
+  cookie **name or value**; `standdown` matches **names only**. Both live adopter
   tokens (`lsclick_mid`, `linkshare`) are real cookie *names*, so name-only still
   catches them — name-only merely drops the old code's value-substring
   over-matches. No fix.
@@ -213,10 +213,10 @@ it once it agrees with reality on purpose.
 - **`ignore_param` scope (dangerous-more-permissive if mis-set).** Covered above:
   pin `selfExemptionScope: 'policy'`.
 - **Self-click lift gap (needs-human-decision).** The old `ignore_param` actively
-  *cleared* an already-active CJ 60-minute stand-down so a Dupe self-click could
+  *cleared* an already-active CJ 60-minute stand-down so an adopter self-click could
   re-win attribution. `standdown` is **monotone** — it never lifts an active
   stand-down (Invariant, Phase 4). This is safe for never-hijacking but costs
-  Dupe self-attribution in the CJ overlap window. Config cannot close it; a human
+  adopter self-attribution in the CJ overlap window. Config cannot close it; a human
   must accept the loss or build an out-of-library special case.
 - **Amazon / Wayfair (needs-human-decision).** Both resolved by *matching current
   behavior*: exclude `amazonPolicy`, omit the Wayfair block.
@@ -230,7 +230,7 @@ constraints on you, the agent**. If any change you are about to make would
 violate one, stop and flag it instead.
 
 - **No network call in the decision path (I1).** The decision must be local and
-  synchronous. The old code may have *fetched* its policy (Dupe fetched
+  synchronous. The old code may have *fetched* its policy (the adopter fetched
   `/api/stand-down-policy`); the migrated path takes a **statically imported**
   `policies` array. Any policy freshness mechanism (signed refresh, a separate
   shadow fetch) must run **outside** the decision path and must never edit the

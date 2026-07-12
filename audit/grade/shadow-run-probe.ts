@@ -1,5 +1,5 @@
 /**
- * In-browser SHADOW run. Loads the Dupe extension built with the standdown
+ * In-browser SHADOW run. Loads the host extension built with the standdown
  * shadow ENABLED, navigates the real-merchant scenario matrix (spoofed to a
  * local fixture, same technique as dupe-extension-probe.ts), and captures the
  * `[standdown-shadow]` console divergence logs the observer emits on each page.
@@ -41,8 +41,8 @@ const SCENARIOS: Scen[] = [
   { id: 'ebay:disable-domain', host: 'www.ebay.com', path: '/itm/1234567890', expectCurrentStandDown: true },
   { id: 'homedepot:disable-domain', host: 'www.homedepot.com', path: '/p/Some-Product/123456', expectCurrentStandDown: true },
   { id: 'rakuten:cookie-name', host: 'www.nordstrom.com', path: '/product', cookie: { name: 'lsclick_mid_12345', value: 'aff' }, expectCurrentStandDown: true },
-  { id: 'self-click:rakuten', host: 'www.nordstrom.com', path: '/product?ranSiteID=pre29T8xR4CT5spost', expectCurrentStandDown: false },
-  { id: 'self-click:cj', host: 'www.nordstrom.com', path: '/product?cjevent=abc&cp=x_Dupe.com', expectCurrentStandDown: false },
+  { id: 'self-click:rakuten', host: 'www.nordstrom.com', path: '/product?ranSiteID=preEXAMPLESITEIDpost', expectCurrentStandDown: false },
+  { id: 'self-click:cj', host: 'www.nordstrom.com', path: '/product?cjevent=abc&cp=x_examplebrand', expectCurrentStandDown: false },
   { id: 'control:amazon', host: 'www.amazon.com', path: '/dp/B00EXAMPLE', expectCurrentStandDown: false },
   { id: 'control:clean', host: 'www.nordstrom.com', path: '/product', expectCurrentStandDown: false },
 ];
