@@ -3,6 +3,7 @@ import type {
   Behavior,
   Decision,
   Detection,
+  ExemptionRecord,
   SessionRecord,
   StanddownState,
   StateStore,
@@ -301,6 +302,10 @@ export function dropSessionBoundRecords(
     }
   }
 
+  // Self-exemptions live only for the session that granted them; a new browser
+  // session must not inherit them (dropping them errs toward standing down).
+  delete next.exemptions;
+
   return next;
 }
 
@@ -352,9 +357,51 @@ function parseState(value: unknown): StanddownState {
     sessions[host] = parseSessionRecord(record);
   }
 
-  return {
+  const state: StanddownState = {
     sessions,
     auditLog: value.auditLog.map(parseAuditEntry),
+  };
+
+  if (value.exemptions !== undefined) {
+    if (!isRecord(value.exemptions)) {
+      throw new Error('invalid standdown state');
+    }
+
+    const exemptions: Record<string, ExemptionRecord> = {};
+
+    for (const [host, record] of Object.entries(value.exemptions)) {
+      exemptions[host] = parseExemptionRecord(record);
+    }
+
+    state.exemptions = exemptions;
+  }
+
+  return state;
+}
+
+function parseExemptionRecord(value: unknown): ExemptionRecord {
+  if (!isRecord(value)) {
+    throw new Error('invalid exemption record');
+  }
+
+  const { advertiserHost, policyIds, networkIds, grantedAt } = value;
+
+  if (
+    typeof advertiserHost !== 'string' ||
+    typeof grantedAt !== 'number' ||
+    !Array.isArray(policyIds) ||
+    !policyIds.every((id) => typeof id === 'string') ||
+    !Array.isArray(networkIds) ||
+    !networkIds.every((id) => typeof id === 'string')
+  ) {
+    throw new Error('invalid exemption record');
+  }
+
+  return {
+    advertiserHost,
+    policyIds: [...policyIds],
+    networkIds: [...networkIds],
+    grantedAt,
   };
 }
 
@@ -447,7 +494,7 @@ function parseAuditEntry(value: unknown): AuditEntry {
 }
 
 function cloneState(state: StanddownState): StanddownState {
-  return {
+  const next: StanddownState = {
     sessions: Object.fromEntries(
       Object.entries(state.sessions).map(([host, record]) => [
         host,
@@ -456,6 +503,21 @@ function cloneState(state: StanddownState): StanddownState {
     ),
     auditLog: state.auditLog.map(cloneAuditEntry),
   };
+
+  if (state.exemptions) {
+    next.exemptions = Object.fromEntries(
+      Object.entries(state.exemptions).map(([host, record]) => [
+        host,
+        {
+          ...record,
+          policyIds: [...record.policyIds],
+          networkIds: [...record.networkIds],
+        },
+      ]),
+    );
+  }
+
+  return next;
 }
 
 function cloneSessionRecord(record: SessionRecord): SessionRecord {
@@ -498,6 +560,12 @@ function cloneAuditEntry(entry: AuditEntry): AuditEntry {
 
     if (entry.detection.strongest !== undefined) {
       next.detection.strongest = { ...entry.detection.strongest };
+    }
+
+    if (entry.detection.selfExemptScopes !== undefined) {
+      next.detection.selfExemptScopes = entry.detection.selfExemptScopes.map(
+        (scope) => ({ ...scope }),
+      );
     }
 
     if (entry.detection.failClosedReason !== undefined) {

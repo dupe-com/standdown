@@ -145,6 +145,75 @@ describe('StateStore implementations', () => {
     ).resolves.toMatchObject({ sessions: {} });
   });
 
+  it('round-trips session exemptions and audit selfExemptScopes through persistence', async () => {
+    const local = new FakeChromeStorageArea();
+    const state: StanddownState = {
+      ...stateWithSessionAndInactivityRecords(),
+      exemptions: {
+        'session.example': {
+          advertiserHost: 'session.example',
+          policyIds: ['alfa'],
+          networkIds: ['alfa'],
+          grantedAt: 0,
+        },
+      },
+      auditLog: [
+        {
+          time: 0,
+          action: 'ingest',
+          advertiserHost: 'session.example',
+          detection: {
+            matched: [],
+            selfMatch: true,
+            selfExemptScopes: [{ policyId: 'alfa', networkId: 'alfa' }],
+          },
+        },
+      ],
+    };
+    await new ChromeLocalStateStore(local, {
+      sessionId: 'browser-session-1',
+      now: () => 0,
+    }).save(state);
+
+    const loaded = await new ChromeLocalStateStore(local, {
+      sessionId: 'browser-session-1',
+      now: () => 1_000,
+    }).load();
+
+    expect(loaded?.exemptions?.['session.example']).toMatchObject({
+      policyIds: ['alfa'],
+      networkIds: ['alfa'],
+    });
+    expect(loaded?.auditLog[0]?.detection?.selfExemptScopes).toEqual([
+      { policyId: 'alfa', networkId: 'alfa' },
+    ]);
+  });
+
+  it('drops session exemptions when the browser session changes', async () => {
+    const local = new FakeChromeStorageArea();
+    await new ChromeLocalStateStore(local, {
+      sessionId: 'browser-session-1',
+      now: () => 0,
+    }).save({
+      ...stateWithSessionAndInactivityRecords(),
+      exemptions: {
+        'session.example': {
+          advertiserHost: 'session.example',
+          policyIds: ['alfa'],
+          networkIds: ['alfa'],
+          grantedAt: 0,
+        },
+      },
+    });
+
+    const loaded = await new ChromeLocalStateStore(local, {
+      sessionId: 'browser-session-2',
+      now: () => 1_000,
+    }).load();
+
+    expect(loaded?.exemptions).toBeUndefined();
+  });
+
   it('keeps audit log when localStorage-TTL session state expires', async () => {
     const local = new FakeWebStorage();
     await new LocalStorageTtlStateStore(local, {
