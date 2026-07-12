@@ -1,0 +1,50 @@
+name: Bug report
+description: Report incorrect stand-down / activation behavior or a defect
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do **not** include real user data, cookie
+        values, or credentials — standdown is privacy-sensitive and issues are public.
+  - type: input
+    id: version
+    attributes:
+      label: standdown version
+      placeholder: e.g. 0.1.1
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      description: Which entry point?
+      options:
+        - standdown (core)
+        - standdown/policies
+        - standdown/webext
+        - standdown/content
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What decision did you expect (stand down / allow activation) and why?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Minimal signals/policies to reproduce. Redact any real identifiers.
+      render: ts
+    validations:
+      required: false
