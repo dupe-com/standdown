@@ -1,0 +1,39 @@
+# standdown
+
+> Client-side, advisory affiliate stand-down for browser extensions and shopping
+> tools. `standdown` decides whether your extension should stay quiet because a
+> partner already owns the current affiliate attribution — so you don't hijack a
+> sale someone else referred. It returns a `Decision` and fires nothing itself;
+> you own the side effects. Decisions are local and synchronous, signals are a
+> closed type that excludes user identity, and it fails toward standing down.
+
+Install: `npm install standdown`. Published ESM + CJS. Four entry points:
+`standdown` (core), `standdown/policies` (network packs), `standdown/webext`
+(Chromium MV3 adapter), `standdown/content` (Safari / page-level adapter).
+
+Minimal MV3 integration:
+
+```ts
+import { allPolicies } from 'standdown/policies';
+import { createStanddown } from 'standdown/webext';
+const standdown = createStanddown({ policies: allPolicies, publisherSites: ['your-site.com'] });
+// content/popup: const { decision } = await chrome.runtime.sendMessage({ type: 'standdown:shouldStandDown', tabId, url });
+// if (decision.standDown) return;  // suppress activation
+```
+
+## Integration
+
+- [AGENTS.md](./AGENTS.md): step-by-step playbook for an AI agent adding standdown to an extension (install → adapter → integrate → build/bundle → grade).
+- [Webext quickstart](./README.md): `createStanddown()` for Chromium MV3; requires `chrome.webNavigation.onCommitted`.
+- [Content quickstart](./README.md): `createContentStanddown()` for Safari / reduced-permission; `await standdown.ready`; handle `decision.degraded`.
+- [examples/mv3-extension](./examples/mv3-extension): working MV3 background worker + popup, with the required esbuild bundle step (subpath imports don't resolve raw in extension contexts).
+
+## Reference
+
+- [README.md](./README.md): full API, `selfPatterns` self-exemption scope, per-host disable, degraded decisions, interop.
+- [POLICIES.md](./POLICIES.md): bundled network packs (cj, impact, rakuten, awin, shareasale, ebay-epn, amazon, universal) with citations. `allPolicies` is the verified set; `experimentalPolicies` (skimlinks, partnerize) are opt-in.
+- [audit/](./audit): conformance grader — loads a real unpacked extension in a real browser and scores stand-down F→A+, with an inert cap so dead code can't score well.
+
+## Invariants
+
+- I1 client-side decisions only · I2 no user profiling (closed signal type) · I3 fail toward standing down · I4 monotone remote updates · I5 audit log on by default.
