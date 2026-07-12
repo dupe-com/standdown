@@ -3,6 +3,7 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/status-alpha-E5484D?labelColor=1C1917" alt="project status: alpha">
   <a href="https://www.npmjs.com/package/standdown"><img src="https://img.shields.io/npm/v/standdown?color=F5A623&label=npm&labelColor=1C1917" alt="npm version"></a>
   <a href="https://github.com/dupe-com/standdown/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/dupe-com/standdown/ci.yml?branch=main&label=CI&labelColor=1C1917" alt="CI status"></a>
   <img src="https://img.shields.io/badge/dependencies-0-2ea043?labelColor=1C1917" alt="zero runtime dependencies">
@@ -10,6 +11,14 @@
   <a href="./LICENSE"><img src="https://img.shields.io/npm/l/standdown?color=8A8175&labelColor=1C1917" alt="MIT license"></a>
   <a href="https://affiliatecoc.org"><img src="https://img.shields.io/badge/aligned-Affiliate%20CoC-F5A623?labelColor=1C1917" alt="aligned with the Affiliate Code of Conduct"></a>
 </p>
+
+> [!WARNING]
+> **Alpha — expect bugs and breaking changes.** standdown is pre-1.0 and under
+> active development: the API may shift between minor versions and edge cases are
+> still being found. Because it makes revenue-affecting decisions, pin your
+> version, verify it against your own integration with the
+> [conformance grader](./audit), and please
+> [report anything that misbehaves](https://github.com/dupe-com/standdown/issues).
 
 > **Your extension shouldn't steal the sale.** `standdown` detects existing
 > affiliate attribution, suppresses competing activation, and proves the
