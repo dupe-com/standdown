@@ -52,6 +52,37 @@ not by a promise in a blog post.
 - 📦 **Zero runtime dependencies.** Ships ESM + CJS + types. MV3, with a
   content-script path for Safari and reduced-permission contexts.
 
+## Works across the major affiliate networks
+
+Each bundled pack implements a network's *stand-down* expectations — the
+detection signals it sets, the suppression behavior it asks for, and how long it
+lasts — so you don't have to reverse-engineer them. Eight **verified** packs
+ship enabled by default: seven named networks, plus a universal
+redirect-fingerprint set.
+
+<p align="center">
+  <a href="https://www.cj.com/legal/software-policy"><img src="https://img.shields.io/badge/CJ%20Affiliate-00857C?style=for-the-badge&logoColor=white" alt="CJ Affiliate"></a>
+  <a href="https://impact.com/stand-down-policy.ihtml"><img src="https://img.shields.io/badge/Impact-0E1C36?style=for-the-badge&logoColor=white" alt="Impact"></a>
+  <a href="https://github.com/rakutenrewards/PublisherStandown-SDK"><img src="https://img.shields.io/badge/Rakuten%20Advertising-BF0000?style=for-the-badge&logo=rakuten&logoColor=white" alt="Rakuten Advertising"></a>
+  <a href="https://success.awin.com/s/article/Downloadable-Software-Guidelines"><img src="https://img.shields.io/badge/Awin-E4097E?style=for-the-badge&logoColor=white" alt="Awin"></a>
+  <a href="https://success.awin.com/s/article/Downloadable-Software-Guidelines"><img src="https://img.shields.io/badge/ShareASale-1F6FB2?style=for-the-badge&logoColor=white" alt="ShareASale"></a>
+  <a href="https://partnernetwork.ebay.com/browser-extension-policy"><img src="https://img.shields.io/badge/eBay%20Partner%20Network-E53238?style=for-the-badge&logo=ebay&logoColor=white" alt="eBay Partner Network"></a>
+  <a href="https://affiliate-program.amazon.com/help/operating/policies"><img src="https://img.shields.io/badge/Amazon%20Associates-FF9900?style=for-the-badge&logoColor=white" alt="Amazon Associates"></a>
+</p>
+
+The eighth verified pack is a **universal** set of publisher-contributed
+redirect fingerprints ([piedotorg/standdown-domains](https://github.com/piedotorg/standdown-domains)).
+Two more **experimental** packs are inferred from domain knowledge and stay
+opt-in until you verify them for your integration:
+
+<p align="center">
+  <a href="https://www.sovrn.com/sovrn-commerce-publisher-code-of-conduct/"><img src="https://img.shields.io/badge/Sovrn%20%2F%20Skimlinks-FF5A00?style=for-the-badge&logoColor=white" alt="Sovrn / Skimlinks"></a>
+  <a href="https://partnerize.com/legal/terms-and-conditions/"><img src="https://img.shields.io/badge/Partnerize-00B0A6?style=for-the-badge&logoColor=white" alt="Partnerize"></a>
+</p>
+
+> Network names and logos identify the stand-down policies each pack implements.
+> They don't imply endorsement, partnership, or certification by these networks.
+
 It ships four surfaces:
 
 | Import | Purpose |
