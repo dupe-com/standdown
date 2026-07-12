@@ -27,7 +27,8 @@
     "dist",
     "README.md",
     "LICENSE",
-    "POLICIES.md"
+    "POLICIES.md",
+    "ADOPTING.md"
   ],
   "exports": {
     ".": {
