@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "synthetic-bad",
+  "version": "1.0.0",
+  "description": "Test double: always activates, hijacking any existing attribution. Should score F.",
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    { "matches": ["http://*/*", "https://*/*"], "js": ["content.js"], "run_at": "document_start", "all_frames": false }
+  ]
+}

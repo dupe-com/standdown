@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "name": "synthetic-inert",
+  "version": "1.0.0",
+  "description": "Test double: does nothing. Must trip the inert cap, not score A+.",
+  "host_permissions": ["<all_urls>"]
+}

@@ -22,6 +22,36 @@ developers who need to detect existing affiliate attribution, suppress
 competing activation, and prove that suppression decisions were made locally and
 deterministically.
 
+## What makes it different
+
+Affiliate stand-down is easy to claim and hard to prove. `standdown` is built so
+the guarantees are structural — enforced by the type system and the architecture,
+not by a promise in a blog post.
+
+- 🔒 **Decisions never leave the device.** No network call participates in a
+  stand-down decision, ever. The decision path is a pure function of local
+  signals and bundled policies.
+- 🛡️ **User data can't leak into a decision — by construction.** `Signals` is a
+  closed type: identity, accounts, balances, email, and login state are
+  structurally unable to enter it. No profiling, no compliance-tester detection.
+- ⚖️ **Fails toward standing down.** Ambiguity, storage errors, or a malformed
+  policy all resolve to *suppress*. The library never hijacks a sale by accident.
+- 🧾 **Provably compliant.** Every decision is deterministic and appended to a
+  local, exportable audit log — reproducible evidence you can hand to a
+  third-party auditor.
+- 🎯 **Detects attribution the way networks actually set it.** Landing params,
+  redirect-chain hops, first-party cookie *names* (never values), and
+  referrer/initiator classification — across eight verified network packs.
+- ✍️ **Tamper-evident updates.** Signed policy bundles (Ed25519 / ECDSA-P256)
+  that can only *broaden* coverage or *lengthen* durations — a remote update can
+  never weaken a guard.
+- 🅰️ **It grades itself, F→A+.** A [black-box conformance harness](#conformance-grading)
+  loads a real extension into a real browser and scores whether it respects
+  existing attribution — with an inert-code guard so "disciplined" can't be faked
+  by shipping nothing.
+- 📦 **Zero runtime dependencies.** Ships ESM + CJS + types. MV3, with a
+  content-script path for Safari and reduced-permission contexts.
+
 It ships four surfaces:
 
 | Import | Purpose |
@@ -210,6 +240,33 @@ const guard = guardActivation({
   code loading.
 - **I7: Deterministic and loggable.** Given the same local signals, policies,
   state, and clock, decisions are reproducible.
+
+## Conformance grading
+
+Unit tests prove the library's decisions in isolation. The
+[`audit/`](./audit) harness proves the thing they can't: whether a *real MV3
+extension*, loaded into a *real browser* against realistic merchant pages,
+actually stands down instead of hijacking existing attribution.
+
+It serves synthetic merchant fixtures carrying pre-existing attribution for
+each network, drives an extension through every scenario, and scores the run
+**F → A+**:
+
+```sh
+cd audit && npm install
+npx tsx grade/grade.ts /path/to/your/unpacked-extension
+#   standdown grade: A+  (100/100)
+#   Respected existing attribution across all tested networks and activated when allowed.
+```
+
+The rubric includes an **inert cap**: an extension that never activates even when
+activation is *allowed* hasn't proven it does anything, so it can't score above a
+C. That stops "disciplined stand-down" from being faked by shipping dead code.
+Three reference extensions (`good` / `bad` / `inert`) ship alongside to validate
+the grader itself.
+
+The harness is opt-in: it is not part of the npm package and is not on the
+required CI path. See [`audit/README.md`](./audit/README.md) for the full guide.
 
 ## Per-host disable
 

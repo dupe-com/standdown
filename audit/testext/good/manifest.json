@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "synthetic-good",
+  "version": "1.0.0",
+  "description": "Test double: activates only when no prior attribution; stands down otherwise.",
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    { "matches": ["http://*/*", "https://*/*"], "js": ["content.js"], "run_at": "document_start", "all_frames": false }
+  ]
+}
