@@ -99,7 +99,8 @@ npm install standdown
 ```
 
 `standdown` is published to npm and versioned with semver from `0.1.0`. Releases
-are cut by a human; the repo does not publish from CI.
+are cut by a human with `npm run release` (see [RELEASING.md](./RELEASING.md));
+the repo does not publish from CI.
 
 ## Set it up with an AI agent
 

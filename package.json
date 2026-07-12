@@ -63,7 +63,8 @@
     "lint": "biome check .",
     "build": "tsup",
     "test": "vitest run",
-    "policies-cite-check": "node scripts/policies-cite-check.mjs"
+    "policies-cite-check": "node scripts/policies-cite-check.mjs",
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {},
   "devDependencies": {
