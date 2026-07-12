@@ -51,7 +51,7 @@ interface StanddownPolicy {
   standdown: {
     scope: 'advertiser'            // only value in v1; field exists for forward compat
     sessionRule: 'session-or-min' | 'inactivity-window'
-    minDurationMs: number          // Impact: 1_800_000; CoC fallback: 5_400_000 (90m)
+    minDurationMs: number          // CJ: 3_600_000 (60m); session-only packs: 0; CoC fallback: 5_400_000 (90m)
     inactivityMs?: number          // CoC preferred: 3_600_000 (60m)
     behaviors: Behavior[]          // ['suppress-prompts','no-cookie-write','no-redirect','no-background-tracking']
   }
@@ -69,6 +69,17 @@ interface StanddownPolicy {
 // DomainRule: { pattern: string; kind: 'suffix'|'regex'; comment?: string }  // suffix match must be
 //   proper domain-suffix (dot-boundary), NOT substring.
 ```
+
+**`session-or-min` duration semantics.** A `session-or-min` stand-down stays
+active for the entire lifetime of its session record in the store — it does not
+expire on a timer. `minDurationMs` therefore expresses an intended *floor*, not a
+ceiling: `0` means "session-only, no extra minimum" and any positive value
+documents a minimum the integrator wants honored across session boundaries. That
+floor is only enforced as real elapsed time when a **persistent** store
+(`ChromeLocalStateStore`) carries the record past a session; with a
+session-scoped store the stand-down simply ends with the session. `inactivity-window`
+is the rule that computes a timed expiry (`max(startedAt + minDurationMs,
+lastActivityAt + inactivityMs)`).
 
 ### Signals (closed type — see I2)
 
@@ -141,9 +152,9 @@ Every pack entry carries `metadata.sourceUrl` + `lastVerified: '2026-07-10'`. Se
 
 | Pack | Landing params | Redirect domains | Cookies | Stand-down | Activation |
 |---|---|---|---|---|---|
-| `cj` | `cjevent`; corroborating: `cjdata`, `utm_source=cj`, `sf_cs=cj`; `afsrc=1` | dpbolvw.net, anrdoezrs.net, jdoqocy.com, kqzyfj.com, tkqlhce.com, qksrv.net, awltovhc.com, lduhtrp.net (+ full ~21 from Pie list) | `cje`, `cjevent_dc` (substring) | session-or-min 30m | user-click |
-| `impact` | `afsrc=1` (canonical), `irclickid` | (per-merchant) | `im_ref` (substring) | session-or-min 30m (policy: session or ≥30min, whichever longer) | user-click |
-| `rakuten` | `ranMID`+`ranEAID`+`ranSiteID` OR-groups `siteID` | click.linksynergy.com, linksynergy.* | `lsclick_mid*`, `*linkshare*` (substring) | session-or-min (browser session) | user-click |
+| `cj` | `cjevent`; corroborating: `cjdata`, `utm_source=cj`, `sf_cs=cj`; `afsrc=1` | dpbolvw.net, anrdoezrs.net, jdoqocy.com, kqzyfj.com, tkqlhce.com, qksrv.net, awltovhc.com, lduhtrp.net (+ full ~21 from Pie list) | `cje`, `cjevent_dc` (substring) | session-or-min 60m | user-click |
+| `impact` | `afsrc=1` (canonical), `irclickid` | (per-merchant) | `im_ref` (substring) | session-only | user-click |
+| `rakuten` | `ranMID`+`ranEAID`+`ranSiteID` OR-groups `siteID` | click.linksynergy.com, linksynergy.* | `lsclick_mid*`, `*linkshare*` (substring) | session-only | user-click |
 | `awin` | `awc`; corroborating `utm_source=aw`, `source=aw` | awin1.com | — | session-or-min | user-click |
 | `shareasale` | `sscid` | shareasale.com | `sscid` (substring) | session-or-min | user-click |
 | `ebay-epn` | `campid`, `pubid`, `mkevt`, `mkcid`, `mkrid`; groups: [campid+_trkparms], [mktype+gclid] | rover.ebay.com | — | re-stand-down on any new non-approved source in-session | user-click, allowedReferrerClasses own-site/organic/direct |

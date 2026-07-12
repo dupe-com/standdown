@@ -222,8 +222,8 @@ bundled `rakuten` policy itself intentionally does not round-trip exactly.
 | Policy | Main signals | Stand-down | Activation |
 | --- | --- | --- | --- |
 | `cj` | `cjevent`, `cjdata`, `utm_source=cj`, `sf_cs=cj`, `afsrc=1`, CJ redirect domains, CJ cookie names | Session-or-min 60m | User click |
-| `impact` | `afsrc=1`, `irclickid`, `irgwc`, `im_ref` cookie names | Session-or-min | User click |
-| `rakuten` | `ranMID`, `ranEAID`, `ranSiteID`, `siteID`, LinkSynergy redirect domains, LinkShare cookie names | Session-or-min fallback | User click |
+| `impact` | `afsrc=1`, `irclickid`, `irgwc`, `im_ref` cookie names | Session-only | User click |
+| `rakuten` | `ranMID`, `ranEAID`, `ranSiteID`, `siteID`, LinkSynergy redirect domains, LinkShare cookie names | Session-only | User click |
 | `awin` | `awc`, `utm_source=aw`, `source=aw`, `awin1.com` | CoC defaults | User click |
 | `shareasale` | `sscid`, ShareASale redirect domains, `sscid` cookie name | CoC defaults | User click |
 | `ebay-epn` | eBay EPN params, `rover.ebay.com`, scoped referrer classification | CoC defaults | User click |

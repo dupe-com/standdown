@@ -1,7 +1,11 @@
 import type { Behavior, StanddownPolicy } from './types';
 
 const LAST_VERIFIED = '2026-07-10';
-const THIRTY_MINUTES_MS = 1_800_000;
+// session-only: no minimum floor. A `session-or-min` stand-down stays active for
+// the lifetime of its session record regardless of this value, so 0 means "lasts
+// exactly the session, with no extra timed minimum" (matches networks that set no
+// stand-down TTL in production).
+const SESSION_ONLY_MIN_MS = 0;
 const SIXTY_MINUTES_MS = 3_600_000;
 const COC_INACTIVITY_MS = 3_600_000;
 const COC_FALLBACK_MIN_MS = 5_400_000;
@@ -115,7 +119,7 @@ export const impactPolicy = {
   standdown: {
     scope: 'advertiser',
     sessionRule: 'session-or-min',
-    minDurationMs: THIRTY_MINUTES_MS,
+    minDurationMs: SESSION_ONLY_MIN_MS,
     behaviors: standdownBehaviors,
   },
   activation: { mode: 'user-click' },
@@ -123,7 +127,7 @@ export const impactPolicy = {
     sourceUrl: 'https://impact.com/stand-down-policy.ihtml',
     lastVerified: LAST_VERIFIED,
     notes:
-      'Impact stand-down policy URL and irclickid/im_ref signals are from pre-build research; irgwc is attributed to piedotorg/standdown-domains.',
+      'Impact stand-down policy URL and irclickid/im_ref signals are from pre-build research; irgwc is attributed to piedotorg/standdown-domains. Session-only (no minimum) matches production enforcement, which sets no stand-down TTL.',
   },
 } as const satisfies StanddownPolicy;
 
@@ -167,7 +171,7 @@ export const rakutenPolicy = {
   standdown: {
     scope: 'advertiser',
     sessionRule: 'session-or-min',
-    minDurationMs: COC_FALLBACK_MIN_MS,
+    minDurationMs: SESSION_ONLY_MIN_MS,
     behaviors: standdownBehaviors,
   },
   activation: { mode: 'user-click' },
