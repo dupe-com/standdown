@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.2.3 - 2026-07-12
+
+### Added
+
+- Ship `ADOPTING.md` in the published package. The README links to the
+  brownfield adoption guide, so npm consumers now get it instead of a dead link.
+- Audit harness: grade against your own policy pack via a `POLICY_PACK=<module>`
+  env var (`audit/fixtures/resolvePolicies.ts`). The grader already derives its
+  whole scenario matrix from the packs, so supplying your policy is all that's
+  needed — no affiliate identifiers are hardcoded on that path.
+- Audit harness: an in-browser side-by-side probe
+  (`audit/grade/shadow-sidebyside-probe.ts`) comparing the library's decision
+  against a host extension's own detector.
+
+### Changed
+
+- Generalized the adoption guide and audit probes: replaced a specific adopter's
+  example affiliate identifiers and internal keys with neutral placeholders, and
+  reframed the worked examples around a generic "host/adopting extension." No
+  library behavior change — docs and dev tooling only.
+
+## 0.2.2 - 2026-07-12
+
+### Changed
+
+- Marked the project as alpha in the README (status badge + notice).
+
+## 0.2.1 - 2026-07-12
+
+### Added
+
+- Brownfield adoption guide (`ADOPTING.md`) and agent-onboarding notes for
+  migrating an existing stand-down decision path onto the library.
+- `npm run release` — one-command, human-cut release script.
+
 ## 0.2.0 - 2026-07-11
 
 ### Added
