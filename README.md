@@ -144,6 +144,36 @@ const decision = await standdown.ready;
 const suppress = decision.standDown || decision.degraded;
 ```
 
+## Self-exemption scope
+
+`selfPatterns` declare the params that are *your own* attribution — when one
+matches, the library does not stand down against that network (it's your click,
+not a competitor's). By default this exemption lasts only for the navigation that
+carries the param (`selfExemptionScope: 'policy'`). Merchants often strip the
+param on later internal navigations while your attribution (a first-party cookie,
+say) lingers — under policy scope that lingering signal would then read as a
+competitor and stand you down.
+
+`selfExemptionScope: 'session'` fixes that: once your param is seen on a host, the
+exemption is remembered for the session and re-applied to *that same network's*
+signals on later param-less navigations. This is Dupe's `ignore_param` behavior.
+
+```ts
+const session = new StanddownSession(store, { selfExemptionScope: 'session' });
+// or, through an adapter:
+createStanddown({ policies, selfPatterns, selfExemptionScope: 'session' });
+```
+
+It is deliberately **network-precise, not host-blanket**, and monotone:
+
+- A fresh signal from a *different* network on the same host still stands down —
+  claiming the host for your network never silences a competitor's.
+- A session exemption **never lifts an already-active stand-down**. If a
+  competitor stand-down formed first, a later self-param does not clear it (no
+  exemption is even recorded while a stand-down is active).
+- A `disableHosts` match is immune — a hard-disabled host stands down regardless
+  of any exemption.
+
 ## Core Usage
 
 ```ts

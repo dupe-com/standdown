@@ -53,6 +53,13 @@ export interface CreateStanddownOptions {
   readonly sessionId?: string;
   readonly now?: () => number;
   readonly auditLog?: boolean;
+  /**
+   * How long a `selfPatterns` match suppresses stand-down for its advertiser
+   * host. `'policy'` (default) exempts only the navigation carrying the param;
+   * `'session'` persists the exemption for the host across later param-less
+   * navigations (Dupe's `ignore_param` semantics).
+   */
+  readonly selfExemptionScope?: 'policy' | 'session';
 }
 
 export interface StanddownWebextController {
@@ -172,10 +179,7 @@ export function createStanddown(
       sessionId: opts.sessionId,
       now,
     });
-  const session = new StanddownSession(
-    store,
-    opts.auditLog === undefined ? undefined : { auditLog: opts.auditLog },
-  );
+  const session = new StanddownSession(store, sessionOptions(opts));
   const redirectChains = new Map<number, string[]>();
   const redirectRequestIds = new Map<number, string>();
   const initiators = new Map<number, string>();
@@ -434,6 +438,27 @@ export function createStanddown(
     handleMessage,
     dispose,
   };
+}
+
+function sessionOptions(
+  opts: CreateStanddownOptions,
+):
+  | { auditLog?: boolean; selfExemptionScope?: 'policy' | 'session' }
+  | undefined {
+  const sessionOpts: {
+    auditLog?: boolean;
+    selfExemptionScope?: 'policy' | 'session';
+  } = {};
+
+  if (opts.auditLog !== undefined) {
+    sessionOpts.auditLog = opts.auditLog;
+  }
+
+  if (opts.selfExemptionScope !== undefined) {
+    sessionOpts.selfExemptionScope = opts.selfExemptionScope;
+  }
+
+  return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;
 }
 
 function createChromeStore(

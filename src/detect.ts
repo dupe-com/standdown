@@ -8,6 +8,7 @@ import type {
   ParamRule,
   ReferrerClass,
   SelfExemption,
+  SelfExemptScope,
   Signals,
   StanddownPolicy,
 } from './types';
@@ -38,6 +39,7 @@ export function detect(
 
   const advertiserHost = currentUrl.hostname.toLowerCase();
   const matched: MatchedRule[] = [];
+  const selfExemptScopes: SelfExemptScope[] = [];
   let selfMatch = false;
 
   for (const policy of policies) {
@@ -73,6 +75,10 @@ export function detect(
     }
 
     if (scopedSelfMatch) {
+      selfExemptScopes.push({
+        policyId: policy.id,
+        networkId: policy.network.id,
+      });
       continue;
     }
 
@@ -91,7 +97,17 @@ export function detect(
       }
     : undefined;
 
-  return strongest ? { matched, selfMatch, strongest } : { matched, selfMatch };
+  const base: Detection = { matched, selfMatch };
+
+  if (strongest) {
+    base.strongest = strongest;
+  }
+
+  if (selfExemptScopes.length > 0) {
+    base.selfExemptScopes = selfExemptScopes;
+  }
+
+  return base;
 }
 
 export function classifyReferrer(
