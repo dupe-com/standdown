@@ -3,8 +3,8 @@ import {
   MemoryStateStore,
   type ParamMatcher,
   type Signals,
-  StanddownSession,
   type StanddownPolicy,
+  StanddownSession,
 } from '../src';
 import { allPolicies, experimentalPolicies } from '../src/policies';
 
