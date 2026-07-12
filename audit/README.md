@@ -12,7 +12,7 @@ grade.
 
 ## What it does
 
-- **`fixtures/`** — a local HTTPS server that serves synthetic merchant landing
+- **`fixtures/`** — a local HTTP server (on `127.0.0.1`) that serves synthetic merchant landing
   pages carrying pre-existing attribution for each supported network (landing
   params, first-party cookies, redirect hops, referrer classes), plus clean
   controls.
@@ -59,3 +59,12 @@ It reports a scenario-by-scenario pass / MISS / HIJACK breakdown plus an overall
 letter grade. The scenarios in `fixtures/scenarios.ts` are derived from the same
 policy packs the library ships, so a high grade means your extension stands down
 on the attribution `standdown` knows how to detect.
+
+> **Scope of the activation sensor.** The grader detects an "activation" as a
+> request to the fixture's own affiliate endpoint (`/aff/…?actor=`) — the shape
+> the reference extensions use. It reliably catches **hijacks** (competing
+> attribution introduced against the fixtures) for any extension, but an
+> extension that activates only by redirecting to a *third-party* network's own
+> redirector won't trip that sensor, so its positive controls may under-report
+> and read as inert. For arbitrary real-world extensions, read the grade
+> alongside the per-scenario evidence rather than as a single number.

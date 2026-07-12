@@ -64,6 +64,8 @@ async function startLocalSite() {
 async function launch(extPath: string): Promise<{ context: BrowserContext; userDataDir: string }> {
   const userDataDir = await mkdtemp(join(tmpdir(), 'standdown-spike-'));
   // New headless mode supports extensions and needs no visible window.
+  // headless:false is deliberate: it stops Playwright injecting OLD headless
+  // (which can't load MV3 extensions) so our explicit --headless=new applies.
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
     args: [

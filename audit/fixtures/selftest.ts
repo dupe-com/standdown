@@ -1,7 +1,7 @@
 import { MemoryStateStore, StanddownSession, detect } from 'standdown';
 import { allPolicies } from 'standdown/policies';
-import { createFixtureServer } from './server';
-import { buildScenarios, type Scenario } from './scenarios';
+import { createFixtureServer } from './server.ts';
+import { buildScenarios, type Scenario } from './scenarios.ts';
 
 /**
  * Closing-the-loop self-test for the fixture substrate. For every scenario:

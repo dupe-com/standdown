@@ -248,7 +248,7 @@ Unit tests prove the library's decisions in isolation. The
 extension*, loaded into a *real browser* against realistic merchant pages,
 actually stands down instead of hijacking existing attribution.
 
-It serves synthetic HTTPS merchant fixtures carrying pre-existing attribution for
+It serves synthetic merchant fixtures carrying pre-existing attribution for
 each network, drives an extension through every scenario, and scores the run
 **F → A+**:
 

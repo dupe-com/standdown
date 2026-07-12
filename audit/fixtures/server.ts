@@ -2,7 +2,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { StanddownPolicy } from 'standdown';
 import { allPolicies } from 'standdown/policies';
-import { servedFor, type Mechanism } from './packDerive';
+import { servedFor, type Mechanism } from './packDerive.ts';
 
 /**
  * Zero-dependency mock fixture server for the browser audit path. It presents

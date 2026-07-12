@@ -9,7 +9,7 @@ import {
   servedFor,
   type Mechanism,
   type ParamPair,
-} from './packDerive';
+} from './packDerive.ts';
 
 /** Fixed clock so every scenario is deterministic. */
 export const FIXED_NOW = 0;

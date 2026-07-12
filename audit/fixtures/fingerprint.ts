@@ -1,7 +1,7 @@
 import type { DomainRule, StanddownPolicy } from 'standdown';
 import { domainRuleMatchesUrl } from 'standdown';
 import { allPolicies } from 'standdown/policies';
-import { landingGroups } from './packDerive';
+import { landingGroups } from './packDerive.ts';
 
 /**
  * Affiliate redirect fingerprinting for the browser audit: given a URL a page
