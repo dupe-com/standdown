@@ -46,7 +46,11 @@ step "Build"
 npm run build
 
 step "Tarball preview (what ships to npm)"
-npm publish --dry-run
+# `npm pack --dry-run` lists the files WITHOUT contacting the registry. Do NOT use
+# `npm publish --dry-run` here: it validates against the registry and errors out on
+# the still-current (already-published) version before we've bumped. The real
+# registry check happens at `npm publish` below, after the version bump.
+npm pack --dry-run
 
 # --- Confirm -----------------------------------------------------------------
 # Compute the next version in Node — `npm version --dry-run` still writes
