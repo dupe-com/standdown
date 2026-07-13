@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "slug": "standdown-reference-baseline",
+  "extension": {
+    "name": "standdown reference (allPolicies baseline)",
+    "url": "https://github.com/dupe-com/standdown"
+  },
+  "submittedBy": "dupe-com",
+  "policySet": "allPolicies+experimental",
+  "disableHosts": [],
+  "grade": {
+    "letter": "A+",
+    "score": 100
+  },
+  "inputsSha256": "85225d2cd7cc1ed4511000d678e3e4cffd77338b9ee1c1a8eb254d5a020b07dd",
+  "generatedWith": "standdown",
+  "date": "2026-07-13"
+}

@@ -211,6 +211,11 @@ your working directory that you can post anywhere:
   <img src="https://raw.githubusercontent.com/dupe-com/standdown/main/assets/sample-grade-card.svg" alt="Sample standdown conformance grade card: A+, 100/100" width="640">
 </p>
 
+Graded A/A+? **Add your extension to the [showcase](./SHOWCASE.md)** — a wall of
+fame where every grade is *reproduced by CI* (a submission declares its policy
+inputs; CI re-runs the grader and regenerates the card, so nothing can be faked).
+One prompt opens the PR — see [`showcase/README.md`](./showcase/README.md).
+
 ## Public commitments
 
 <details>
@@ -244,6 +249,7 @@ your working directory that you can post anywhere:
 | [POLICIES.md](./POLICIES.md) | Every network pack, its signals, and citations |
 | [SPEC.md](./SPEC.md) | The behavioral spec and invariants |
 | [audit/](./audit) | The conformance graders |
+| [SHOWCASE.md](./SHOWCASE.md) · [showcase/](./showcase) | "Graded with standdown" wall of fame + how to add yours (CI-verified) |
 | [examples/mv3-extension](./examples/mv3-extension) · [examples/content-extension](./examples/content-extension) | Minimal working integrations |
 
 ## Releasing
