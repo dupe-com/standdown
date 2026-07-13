@@ -112,66 +112,44 @@ and citations in [POLICIES.md](./POLICIES.md).
 > Network names and logos identify the stand-down policies each pack implements.
 > They don't imply endorsement, partnership, or certification by these networks.
 
-## Set it up with an AI agent
+## Set it up — hand it to your coding agent
 
-**The fastest path — and the recommended one — is to hand the whole integration
-to your coding agent.** It reads your extension, finds every place attribution
-fires, gates each behind the decision, bundles, and grades the result. Copy this
-prompt into Claude Code, Cursor, Copilot, etc., pointed at your extension's repo:
+**The supported path is agent-driven.** standdown makes revenue-affecting
+decisions across your extension's code, so the fastest and safest way in is to let
+a coding agent do the work: it reads your codebase, gates every place attribution
+fires, bundles, and grades the result. Paste this into your agent — **Claude Code,
+Codex, Cursor, opencode, Copilot** — pointed at your extension's repo:
 
 ```text
-Integrate the `standdown` npm library into this browser extension so it stops
-hijacking affiliate attribution when a partner already owns the sale. Follow the
-official guide at https://raw.githubusercontent.com/dupe-com/standdown/main/AGENTS.md.
-
-First check whether this extension ALREADY has its own affiliate stand-down /
-attribution-detection logic. If it does, STOP and use the brownfield migration
-prompt at https://raw.githubusercontent.com/dupe-com/standdown/main/ADOPTING.md
-instead — it moves the existing decision path onto the library in shadow mode,
-proving parity before cutover so no live commission is put at risk. Only if this
-is a greenfield install (no existing stand-down logic), do the full loop:
-1. `npm install standdown`.
-2. Pick the adapter by permissions: `standdown/webext` if the extension holds
-   `webNavigation`/`webRequest`, otherwise `standdown/content` (Safari,
-   content-script-only, or any MV3 build without those permissions).
-3. Find every place this extension fires affiliate attribution (redirects, link
-   rewrites, cookie writes) and gate each behind the stand-down decision — do
-   nothing when `decision.standDown` is true.
-4. Bundle per examples/mv3-extension (webext) or examples/content-extension
-   (content); subpath imports don't resolve raw in extension contexts.
-5. Grade it: git clone https://github.com/dupe-com/standdown && cd standdown/audit
-   && npm install && DISABLE_HOSTS="<your disable hosts>" npx tsx grade/conformance.ts
-   Report the letter grade and fix anything below A.
-
-Preserve the invariants: decisions stay local and synchronous (no network in the
-decision path), no user identity in signals, and fail toward standing down.
+Set up the `standdown` affiliate stand-down library in this browser extension,
+then grade and verify it. Read and follow, end to end, the guide at
+https://raw.githubusercontent.com/dupe-com/standdown/main/AGENTS.md — it detects
+whether this is a fresh install or a migration of existing stand-down logic and
+branches accordingly. When you're done, report my conformance grade and keep
+fixing until it's an A or better.
 ```
 
-> **Use a capable model.** This integration reasons about revenue-affecting
-> control flow across an unfamiliar codebase — run it on a frontier coding model
-> (Claude Opus, GPT-5.5, or equivalent). Smaller/faster models miss firing points
-> and mis-handle the `degraded` gate. If you must use a lighter model, review its
-> gating diff by hand and always run the grader.
+That single prompt runs the whole loop — install, adapter choice, gating,
+bundling, and grading — and auto-switches to the shadow-mode
+[migration path](./ADOPTING.md) if your extension already has its own stand-down
+logic. The steps live in one place, [`AGENTS.md`](./AGENTS.md), so every agent
+follows the same playbook.
 
-**Claude Code users** can skip the prompt: this repo ships two skills in
-[`.claude/skills/standdown`](./.claude/skills/standdown) (greenfield) and
-[`skills/adopt-standdown`](./skills/adopt-standdown) (brownfield). Copy the one
-you want into `.claude/skills/` (or `~/.claude/skills/`) and run `/standdown` (or
-`/adopt-standdown`). Agents that read [`AGENTS.md`](./AGENTS.md) or
-[`llms.txt`](./llms.txt) get the same playbook automatically.
+> **Use a capable model.** This reasons about revenue-affecting control flow
+> across an unfamiliar codebase — run it on a frontier coding model (Claude Opus,
+> GPT-5.5, or equivalent). Lighter models miss firing points and mis-handle the
+> `degraded` gate; if you must use one, review the gating diff by hand and always
+> run the grader.
 
-**Prefer to wire it by hand?** The full manual walkthrough and complete API
-reference — adapters, quickstarts, self-exemption, per-host disable, signed
-refresh, interop — live in **[INSTALL.md](./INSTALL.md)**. The five published
-surfaces:
+**On Claude Code?** Skip the copy-paste — this repo ships ready-to-run skills.
+Copy [`.claude/skills/standdown`](./.claude/skills/standdown) into your project
+(or `~/.claude/skills/`) and run **`/standdown`**; for a migration, use
+[`skills/adopt-standdown`](./skills/adopt-standdown) / `/adopt-standdown`. Both
+drive the same `AGENTS.md`/`ADOPTING.md` playbook, so nothing diverges.
 
-| Import | Purpose |
-| --- | --- |
-| `standdown` | Pure core: detection, session state machine, activation guard, policy validation, signed bundle verification |
-| `standdown/policies` | Bundled policy packs and helpers |
-| `standdown/webext` | Manifest V3 background/service-worker adapter |
-| `standdown/content` | Content-script signal collector and evaluator |
-| `standdown/url` | URL-only decision helper for background/side-panel contexts |
+**Wiring it by hand instead?** The full manual walkthrough and complete API
+reference — the five published surfaces, self-exemption, per-host disable, signed
+refresh, the `standdown/url` helper, interop — live in **[INSTALL.md](./INSTALL.md)**.
 
 ## How it's graded
 

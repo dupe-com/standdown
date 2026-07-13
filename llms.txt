@@ -7,9 +7,13 @@
 > you own the side effects. Decisions are local and synchronous, signals are a
 > closed type that excludes user identity, and it fails toward standing down.
 
-Install: `npm install standdown`. Published ESM + CJS. Four entry points:
+Install: `npm install standdown`. Published ESM + CJS. Five entry points:
 `standdown` (core), `standdown/policies` (network packs), `standdown/webext`
-(Chromium MV3 adapter), `standdown/content` (Safari / page-level adapter).
+(Chromium MV3 adapter), `standdown/content` (Safari / page-level adapter),
+`standdown/url` (URL-only decision helper for background/side-panel contexts).
+
+Agents: follow [AGENTS.md](./AGENTS.md) end to end (it branches to
+[ADOPTING.md](./ADOPTING.md) for extensions that already have stand-down logic).
 
 Minimal MV3 integration:
 
@@ -32,7 +36,7 @@ const standdown = createStanddown({ policies: allPolicies, publisherSites: ['you
 
 - [README.md](./README.md): full API, `selfPatterns` self-exemption scope, per-host disable, degraded decisions, interop.
 - [POLICIES.md](./POLICIES.md): bundled network packs (cj, impact, rakuten, awin, shareasale, ebay-epn, amazon, universal) with citations. `allPolicies` is the verified set; `experimentalPolicies` (skimlinks, partnerize) are opt-in.
-- [audit/](./audit): conformance grader — loads a real unpacked extension in a real browser and scores stand-down F→A+, with an inert cap so dead code can't score well.
+- [audit/](./audit): conformance graders, F→A+ with an inert cap so dead code can't score well. `conformanceGrade` (`grade/conformance.ts`) is the authoritative, deterministic, browser-free grade to report; `grade/grade.ts` is an optional in-browser sensor that reads C-inert on most real host extensions.
 
 ## Invariants
 
