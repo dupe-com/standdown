@@ -44,28 +44,25 @@ Only genuinely passing runs are eligible: **A-band, zero hijacks, non-inert.**
 
 ## Add yours — one prompt
 
-After you’ve integrated standdown and your extension grades A/A+, hand this to
-your coding agent (Claude Code users: run `/standdown-showcase`):
+Graded A/A+? Hand this to the same coding agent that did your integration, pointed
+at your extension's repo (Claude Code: run `/standdown-showcase`):
 
 ```text
-Add my extension to the standdown showcase. Clone https://github.com/dupe-com/standdown,
-then in audit/ run the submit tool with my details:
-
-  SLUG=<kebab-slug> NAME="<extension name>" URL=<url> \
-  SUBMITTED_BY=<my github handle> POLICY_SET=<allPolicies|allPolicies+experimental|custom> \
-  DISABLE_HOSTS=<comma,separated,hosts> DATE=<today YYYY-MM-DD> \
-  npm run showcase:submit
-
-If POLICY_SET=custom, also pass POLICIES_FILE=<path to a JSON array of my policies>.
-Then run `npm run showcase:build`, and open a PR to dupe-com/standdown adding
-showcase/submissions/<slug>.json plus the generated card and SHOWCASE.md.
-CI will re-verify the grade from scratch.
-
-For an A+ (Tier 2) badge, if my extension is published and I have its Chrome Web
-Store id, also run `SLUG=<slug> DATE=<today> npm run showcase:live-verify`, then
-`npm run showcase:build` again, and include showcase/verifications/<slug>.json in
-the PR. See the "Reach A+ (Tier 2)" section of showcase/README.md.
+Publish this extension's standdown grade to the "Graded with standdown" showcase.
+It already grades A or A+ on the conformance grader. Clone
+https://github.com/dupe-com/standdown and follow its showcase/README.md end to
+end: derive my submission details from this extension's standdown integration —
+extension name, policy set, the hosts I disable, and (if it's published) my Chrome
+Web Store id — then generate the submission with the submit tool, build the
+CI-authoritative card, and open a PR to dupe-com/standdown. Ask me only for my
+GitHub handle and today's date. If my extension is published, also run the Tier 2
+live-verify for an A+. Never hand-edit the generated grade, SHA, card, or
+SHOWCASE.md — CI re-checks all of it, so a hand-edit just fails the build.
 ```
+
+That single prompt runs the whole flow — submit, build, verify, open the PR (plus
+Tier 2 live-verify when your extension is published). The mechanics it follows are
+right below, if you'd rather run them yourself.
 
 ## Or by hand
 
