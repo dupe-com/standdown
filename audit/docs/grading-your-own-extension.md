@@ -70,9 +70,16 @@ headless Chromium, so use `chrome-mv3`.
 
 ## 2. Set up the audit harness (once)
 
-From the standdown repo's `audit/` directory:
+The audit depends on `standdown` via `file:..`, and the built `dist/` is not
+checked in — so **build the root library first**, or the harness fails with
+`ERR_MODULE_NOT_FOUND: .../dist/policies.mjs`:
 
 ```bash
+# from the standdown repo root — build the library the audit links to
+cd /path/to/standdown
+bun install && bun run build
+
+# then set up the audit harness
 cd /path/to/standdown/audit
 npm install
 npx playwright install chromium

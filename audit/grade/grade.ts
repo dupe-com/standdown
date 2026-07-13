@@ -40,6 +40,17 @@ async function main() {
   const { result, observations } = await gradeExtension(extPath, policies);
   console.log(`\n  standdown grade: ${result.letter}  (${result.score}/100)`);
   console.log(`  ${result.note}\n`);
+  if (result.inert) {
+    console.log(
+      "  Note: INERT means no positive control emitted the activation this grader\n" +
+        "  watches for — a redirect to /aff/:net?actor=, the protocol the bundled\n" +
+        "  testexts speak. Real extensions usually activate by painting UI or opening\n" +
+        "  a monetized tab, which this sensor can't see — so INERT on a real host\n" +
+        '  extension most likely means "wrong sensor for this extension," not "dead\n' +
+        "  code.\" Grade a real host extension with grade/dupe-extension-probe.ts (see\n" +
+        "  audit/README.md).\n",
+    );
+  }
   for (const o of observations) {
     const tag = o.passed ? 'ok  ' : o.expectedIntroduce ? 'MISS' : 'HIJACK';
     console.log(`  [${tag}] ${o.scenario.id.padEnd(34)} ${o.evidence}`);

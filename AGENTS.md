@@ -96,13 +96,30 @@ cookie, no affiliate link rewrite).
 
 Content and reduced-permission webext adapters can't see redirect chains, so a
 `standDown: false` may carry `degraded: true` (a redirect-only attribution could
-have been missed). To fail fully closed:
+have been missed). How you treat `degraded` depends on your extension's profile:
+
+**Redirect-plane tools, or any extension that must never activate without full
+coverage** — treat `degraded` as suppression:
 
 ```ts
 const suppress = decision.standDown || decision.degraded;
 ```
 
-Stand-down decisions are never degraded — over-suppression is the safe direction.
+**Always-on content-adapter extensions** (Safari / content-script shopping
+extensions that must activate on ordinary product pages) — gate on `standDown`
+**alone**:
+
+```ts
+const suppress = decision.standDown;
+```
+
+The content plane **always** reports `degraded: true` on a non-stand-down
+decision (it structurally can't observe redirect chains), so treating `degraded`
+as suppression there means the extension never activates on a clean page — it
+would be inert. Gating on `standDown` alone is still fully fail-closed: the
+library returns `standDown: true` for every error, malformed-policy, and unknown
+state regardless of coverage. Stand-down decisions are never `degraded` —
+over-suppression is the safe direction.
 
 ## Step 5 — Build / bundle (extensions)
 
@@ -128,6 +145,15 @@ npx tsx grade/grade.ts /path/to/your/unpacked-extension
 The rubric is F→A+ with an **inert cap**: an extension that never activates even
 when allowed can't score above a C (so "disciplined stand-down" can't be faked
 with dead code). Target **A/A+** with real activation on the positive controls.
+
+`grade.ts` detects activation by watching for a redirect to `/aff/:net?actor=` —
+the protocol the bundled testexts speak. Real extensions usually activate by
+painting UI or opening a monetized tab, which that sensor can't see, so a
+correctly integrated host extension can still score **C (inert)**. If that
+happens it almost always means "wrong sensor for this extension," not "dead
+code" — grade against the host-extension probe
+([`grade/dupe-extension-probe.ts`](./audit/README.md)) and watch for the shipped
+decision-conformance grader (tracked in issue #22).
 
 ## Gotchas
 
