@@ -1,0 +1,49 @@
+name: Release
+
+# Publishes standdown to npm when a version tag (vX.Y.Z) is pushed.
+# Auth is npm Trusted Publishing (OIDC) — no NPM_TOKEN, no secret is stored.
+# One-time setup: on npmjs.com, add a Trusted Publisher for this package pointing
+# at repo `dupe-com/standdown` and workflow `release.yml`. See RELEASING.md.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  id-token: write # required for OIDC trusted publishing + provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: biomejs/setup-biome@v2
+        with:
+          version: 2.5.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # OIDC trusted publishing requires npm >= 11.5.1; runners ship npm 10.x.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+      - run: bun install
+      - name: Verify the tag matches package.json
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag v$TAG does not match package.json version $PKG"
+            exit 1
+          fi
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run test
+      - run: bun run build
+      - run: bun run policies-cite-check
+      - name: Publish to npm (OIDC trusted publishing + provenance)
+        run: npm publish --provenance --access public
