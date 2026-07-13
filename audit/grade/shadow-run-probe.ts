@@ -1,7 +1,7 @@
 /**
  * In-browser SHADOW run. Loads the host extension built with the standdown
  * shadow ENABLED, navigates the real-merchant scenario matrix (spoofed to a
- * local fixture, same technique as dupe-extension-probe.ts), and captures the
+ * local fixture, same technique as host-extension-probe.ts), and captures the
  * `[standdown-shadow]` console divergence logs the observer emits on each page.
  *
  * This does NOT grade the extension; it validates that the observer FIRES in a

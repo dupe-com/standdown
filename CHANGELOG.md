@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.2.5 - 2026-07-13
+
+Docs and audit-tooling release from a second cold-start integration (a fresh
+agent running the install prompt end-to-end). **No library behavior change** —
+`src`/`dist` are unchanged since 0.2.3.
+
+### Added
+
+- **Shareable grade card.** Both graders (`grade/conformance.ts`, `grade/grade.ts`)
+  now emit a card on a passing run: a terminal card, a self-contained
+  `standdown-grade.svg` (1200×630, OpenGraph ratio) written to the working
+  directory, and a copy-paste social snippet — all crediting the project
+  (`audit/grade/share-card.ts`, with tests). Repo tooling; not part of the package.
+- `INSTALL.md` — the manual install + full API reference (adapters, quickstarts,
+  self-exemption, per-host disable, signed refresh, interop), split out of the
+  README.
+
+### Changed
+
+- **README rewritten prompt-first** (~474 → ~257 lines): the AI-agent integration
+  is now the primary, recommended path (with a "use a capable model" note); a new
+  **How it works** section explains the signals standdown inspects and the
+  greenfield vs brownfield integration shapes; the code-heavy API reference moved
+  to `INSTALL.md`.
+- `AGENTS.md` **Step 6** now leads with `conformanceGrade` (the fast, browser-free
+  adopter grade) and demotes `grade.ts` to the optional in-browser testext sensor;
+  the stale "decision-conformance grader … tracked in issue #22" framing is gone
+  (it shipped in 0.2.4). **Step 2** states the permission-keyed adapter rule
+  explicitly; **Step 5** points content adopters at `examples/content-extension`.
+
+### Renamed
+
+- `audit/grade/dupe-extension-probe.ts` → `audit/grade/host-extension-probe.ts` —
+  a template host-extension probe, not a Dupe-specific one — with all references
+  and the AGENTS.md link corrected.
+
 ## 0.2.4 - 2026-07-12
 
 Docs and audit-tooling release from the first real end-to-end integration
