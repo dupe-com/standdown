@@ -134,7 +134,19 @@ npm run showcase:build        # re-renders the card as A+
 
 This fetches your live crx, confirms the match, and writes
 `showcase/verifications/<slug>.json`. Add that file (plus the regenerated card +
-`SHOWCASE.md`) to your PR. The [`showcase-live-verify`](../.github/workflows/showcase-live-verify.yml)
+`SHOWCASE.md`) to your PR.
+
+> **Before you publish — dry-run against your local build.** Point the verifier
+> at your built `.crx`/`.zip` to confirm it *will* verify once live, without
+> touching the Web Store:
+>
+> ```sh
+> SLUG=<your-slug> CRX_FILE=path/to/your-extension.zip DATE=2026-07-13 npm run showcase:live-verify
+> ```
+>
+> This prints whether the bundle would reach A+ and writes **no** record — so an
+> unpublished build can't be passed off as live-verified. Use it to catch a
+> missing/mismatched manifest *before* shipping. The [`showcase-live-verify`](../.github/workflows/showcase-live-verify.yml)
 job re-downloads the crx and re-derives the SHA on the PR, so a hand-written
 record can't unlock A+ — the live extension has to genuinely bundle the config.
 (A weekly cron re-checks merged records, so if you later ship a divergent version
