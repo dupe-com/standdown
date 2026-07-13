@@ -1,11 +1,11 @@
 ---
-name: standdown
+name: setup
 description: Integrate the `standdown` affiliate stand-down library into a browser extension and grade its conformance F→A+. Use when the user wants their extension to stop hijacking existing affiliate attribution (stand down when a partner already owns the sale), when they ask to "add standdown" / "install standdown", or when they want to grade/verify an extension's stand-down behavior.
 ---
 
-# standdown: install → integrate → grade
+# standdown setup: install → integrate → grade
 
-Thin router. **[`AGENTS.md`](../../../AGENTS.md) at the repo root is the source of
+Thin router. **[`AGENTS.md`](../../AGENTS.md) at the repo root is the source of
 truth** for the greenfield integration loop — install, pick the adapter, gate every
 attribution firing point on `decision.standDown`, bundle, and grade with
 `conformanceGrade`. Do not summarize those steps from memory; read the file and
@@ -18,9 +18,9 @@ raw file: `https://raw.githubusercontent.com/dupe-com/standdown/main/AGENTS.md`.
    its own stand-down / affiliate-attribution logic (a disable list,
    `ignore_param`/self-click handling, cookie or param stand-down checks, a
    `FALLBACK_POLICY`, or "stand down"/"suppress" code), this is **brownfield** —
-   STOP and use the [`adopt-standdown`](../../../skills/adopt-standdown/SKILL.md)
-   skill / [`ADOPTING.md`](../../../ADOPTING.md) instead (shadow-mode migration,
-   parity before cutover). Only proceed here for a **greenfield** install.
+   STOP and use the [`adopt`](../adopt/SKILL.md) skill (`/standdown:adopt`) /
+   [`ADOPTING.md`](../../ADOPTING.md) instead (shadow-mode migration, parity before
+   cutover). Only proceed here for a **greenfield** install.
 
 2. **Drive AGENTS.md Steps 1–6 in order** against the user's extension: confirm the
    target, install, pick the adapter *by permissions* (never add
@@ -45,7 +45,7 @@ raw file: `https://raw.githubusercontent.com/dupe-com/standdown/main/AGENTS.md`.
 
 ## Related
 
-- [`AGENTS.md`](../../../AGENTS.md) — the greenfield playbook (source of truth).
-- [`ADOPTING.md`](../../../ADOPTING.md) + [`adopt-standdown`](../../../skills/adopt-standdown/SKILL.md) — brownfield migration.
-- [`standdown-showcase`](../standdown-showcase/SKILL.md) — publish the A/A+ grade card to the showcase.
-- [`INSTALL.md`](../../../INSTALL.md) — manual walkthrough + full API.
+- [`AGENTS.md`](../../AGENTS.md) — the greenfield playbook (source of truth).
+- [`ADOPTING.md`](../../ADOPTING.md) + [`adopt`](../adopt/SKILL.md) skill — brownfield migration.
+- [`showcase`](../showcase/SKILL.md) skill — publish the A/A+ grade card to the showcase.
+- [`INSTALL.md`](../../INSTALL.md) — manual walkthrough + full API.

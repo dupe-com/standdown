@@ -1,6 +1,6 @@
 ---
-name: adopt-standdown
-description: Migrate an extension that ALREADY has homegrown stand-down / affiliate-suppression logic onto the `standdown` library without losing revenue. Use when the target already suppresses activation on prior affiliate attribution (has disable_domains, ignore_param, cookie/param stand-down checks, a FALLBACK_POLICY, or "stand down"/"suppress" code) and the user wants that logic moved onto `standdown` safely. For an extension with NO stand-down today, use the greenfield "install standdown" skill instead.
+name: adopt
+description: Migrate an extension that ALREADY has homegrown stand-down / affiliate-suppression logic onto the `standdown` library without losing revenue. Use when the target already suppresses activation on prior affiliate attribution (has disable_domains, ignore_param, cookie/param stand-down checks, a FALLBACK_POLICY, or "stand down"/"suppress" code) and the user wants that logic moved onto `standdown` safely. For an extension with NO stand-down today, use the greenfield `setup` skill (`/standdown:setup`) instead.
 ---
 
 # adopt-standdown: brownfield migration onto `standdown`
@@ -13,7 +13,7 @@ big-bang-replace revenue-critical stand-down logic.**
 First, confirm this is a **brownfield** case: the target already stands down
 today (Phase 1 grep will show `disable_domains`, `ignore_param`, cookie/param
 checks, a fetched/fallback policy, or "stand down"/"suppress" code). If it has
-none, stop and use the greenfield skill instead.
+none, stop and use the greenfield `setup` skill (`/standdown:setup`) instead.
 
 Then **read `ADOPTING.md`** and drive its phases in order. Do not summarize from
 memory — the detail (grep table, mapping table, invariant constraints, worked

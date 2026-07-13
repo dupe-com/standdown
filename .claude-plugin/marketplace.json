@@ -1,0 +1,20 @@
+{
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
+  "name": "dupe",
+  "owner": {
+    "name": "Dupe",
+    "url": "https://dupe.com"
+  },
+  "description": "Dupe's Claude Code plugins.",
+  "plugins": [
+    {
+      "name": "standdown",
+      "source": "./",
+      "description": "Install, migrate onto, and showcase the standdown affiliate stand-down library. Commands: /standdown:setup, /standdown:adopt, /standdown:showcase.",
+      "version": "0.1.0",
+      "homepage": "https://github.com/dupe-com/standdown",
+      "repository": "https://github.com/dupe-com/standdown",
+      "license": "MIT"
+    }
+  ]
+}

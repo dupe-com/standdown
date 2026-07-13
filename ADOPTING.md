@@ -298,4 +298,4 @@ Phase 3, step 5 and delete the homegrown logic.
 - `audit/README.md` — the conformance graders (`conformanceGrade` is the letter
   grade used in Phase 5).
 - `AGENTS.md` — the greenfield playbook, for extensions with **no** existing
-  stand-down logic (the `standdown` / `/standdown` skill drives it).
+  stand-down logic (the `setup` skill / `/standdown:setup` drives it).

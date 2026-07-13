@@ -45,7 +45,7 @@ Only genuinely passing runs are eligible: **A-band, zero hijacks, non-inert.**
 ## Add yours — one prompt
 
 Graded A/A+? Hand this to the same coding agent that did your integration, pointed
-at your extension's repo (Claude Code: run `/standdown-showcase`):
+at your extension's repo (Claude Code: run `/standdown:showcase`):
 
 ```text
 Publish this extension's standdown grade to the "Graded with standdown" showcase.
