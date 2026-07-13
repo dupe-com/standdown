@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { guardActivation, validatePolicy } from '../src';
 import { allPolicies, amazonPolicy, cjPolicy, ebayEpnPolicy, policiesFor } from '../src/policies';
 
@@ -150,5 +150,32 @@ describe('policy packs', () => {
         },
       }),
     ).toThrow(/valid regex/);
+  });
+
+  it('warns (without throwing) on a bare-label suffix domain rule', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      // `'ebay.'` normalizes to `ebay` — a substring list mis-ported onto a
+      // suffix rule, which matches no real host. Structurally valid, so it warns.
+      expect(() =>
+        validatePolicy({
+          ...cjPolicy,
+          detection: { disableHosts: [{ pattern: 'ebay.', kind: 'suffix' }] },
+        }),
+      ).not.toThrow();
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toMatch(/ebay\.com/);
+
+      warn.mockClear();
+
+      // A proper registrable domain suffix must not warn.
+      validatePolicy({
+        ...cjPolicy,
+        detection: { disableHosts: [{ pattern: 'ebay.com', kind: 'suffix' }] },
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

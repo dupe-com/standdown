@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.6 - 2026-07-13
+
+Hardening from real integration feedback (an extensions reviewer hit the domain
+footgun below on a live port). **This one touches `src`** — an additive,
+non-breaking dev-time warning; no decision behavior changes.
+
+### Added
+
+- `validatePolicy` now emits a `console.warn` when a `kind: 'suffix'`
+  `DomainRule` uses a bare label (`'ebay.'`, `'ebay'`). Suffix rules match a
+  registrable domain, so a bare label matches no real host — the classic result
+  of mis-porting a substring domain list (`hostname.includes('ebay.')`) onto
+  suffix rules, which silently makes the rule inert. The warning names the fix.
+  Non-throwing: the rule is structurally valid, just almost certainly a mistake.
+
+### Docs
+
+- `AGENTS.md` gotchas and `INSTALL.md` (per-host disable) now document the
+  substring-vs-suffix domain hazard — the domain-level twin of the existing
+  cookie name-only caveat — with the full-host / `kind: 'regex'` fixes.
+
 ## 0.2.5 - 2026-07-13
 
 Docs and audit-tooling release from a second cold-start integration (a fresh

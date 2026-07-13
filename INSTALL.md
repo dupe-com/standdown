@@ -259,6 +259,16 @@ A `disableHosts` match cannot be cleared by a `selfPatterns` exemption — if yo
 list a host here, your own attribution on that host still stands down. Use it only
 for hosts where you never want to activate.
 
+> **Porting a substring domain list?** `kind: 'suffix'` rules match a
+> **registrable domain**, not a substring: `'ebay.com'` matches `ebay.com` and
+> `*.ebay.com`, but a bare `'ebay.'` (or `'ebay'`) matches *nothing real*. A
+> legacy list matched with `hostname.includes('ebay.')` covers every eBay TLD;
+> the same string as a suffix rule is silently **inert**. Expand it to full hosts
+> (`ebay.com`, `ebay.de`, `ebay.com.au`, `ebay.fr`, …) or switch to
+> `kind: 'regex'` (e.g. `'(^|\\.)ebay\\.[a-z.]+$'`). `validatePolicy` emits a
+> `console.warn` when it sees a bare-label suffix, so this trips at load time
+> rather than in production.
+
 ## Build / bundle
 
 Chrome does **not** resolve npm package subpath imports (`standdown/webext`,
