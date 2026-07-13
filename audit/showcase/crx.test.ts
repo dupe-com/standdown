@@ -91,6 +91,21 @@ describe('verifyLiveCrx', () => {
     expect(outcome.verification?.matchedInputsSha256).toBe(sub.inputsSha256);
   });
 
+  it('verifies a bare .zip (no CRX header) carrying a manifest — the wxt/CRX_FILE dry-run case', () => {
+    const sub = customSubmission();
+    // `wxt zip` and the CRX_FILE dry-run hand us a plain PK zip, not a signed crx.
+    const zip = zipSync({
+      'manifest.json': strToU8(JSON.stringify({ version: '0.3.1' })),
+      'standdown.manifest.json': strToU8(
+        JSON.stringify({ schemaVersion: 1, policySet: 'custom', policies: sub.policies, disableHosts: [] }),
+      ),
+    });
+    const outcome = verifyLiveCrx({ crx: Buffer.from(zip), submission: sub, verifiedOn: '2026-07-13' });
+    expect(outcome.ok).toBe(true);
+    expect(outcome.verification?.method).toBe('manifest');
+    expect(outcome.verification?.crxVersion).toBe('0.3.1');
+  });
+
   it('confirms Tier 2 via bundle-scan when the policy array ships as a JSON asset', () => {
     const sub = customSubmission();
     const crx = makeCrx({ 'config/policies.json': JSON.stringify(sub.policies) });

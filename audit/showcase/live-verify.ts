@@ -7,6 +7,11 @@
  *     match writes showcase/verifications/<slug>.json. The submitter commits it
  *     alongside their submission; `showcase:build` then renders an A+ card.
  *
+ *   dry-run:           SLUG=<slug> CRX_FILE=<path> DATE=<YYYY-MM-DD> npm run showcase:live-verify
+ *     Verifies against a LOCAL crx/zip instead of the Web Store — a pre-publish
+ *     confidence check. Prints whether it WOULD reach A+ but writes no record,
+ *     so an unpublished local build can't be passed off as live-verified.
+ *
  *   check (CI):        CHECK=1 DATE=<YYYY-MM-DD> npm run showcase:live-verify
  *     For every committed verification record, re-downloads the live crx and
  *     asserts it STILL matches both the record's SHA and the submission's. This
@@ -35,6 +40,26 @@ async function write(slug: string, date: string): Promise<void> {
   const subPath = join(SUBS_DIR, `${slug}.json`);
   if (!existsSync(subPath)) throw new Error(`no submission at ${subPath} — run showcase:submit first`);
   const submission = loadSubmission(subPath);
+
+  // Dry-run: verify against a LOCAL crx/zip (a pre-publish confidence check).
+  // It never writes a submittable record — only a real Web Store fetch does —
+  // so a locally-built bundle can't be passed off as live-verified.
+  const localCrx = process.env.CRX_FILE;
+  if (localCrx) {
+    if (!existsSync(localCrx)) throw new Error(`CRX_FILE not found: ${localCrx}`);
+    const outcome = verifyLiveCrx({ crx: readFileSync(localCrx), submission, verifiedOn: date });
+    if (!outcome.ok || !outcome.verification) {
+      console.error(`  ✗ ${slug} (dry-run against ${localCrx}): ${outcome.reason}`);
+      process.exit(1);
+    }
+    console.log(
+      `  ✓ ${slug} (DRY-RUN): local bundle v${outcome.verification.crxVersion} bundles the graded set ` +
+        `(${outcome.verification.method}) — this WOULD verify as Tier 2 / A+ once published.\n` +
+        `  No record written. Publish to the Web Store, then re-run without CRX_FILE.`,
+    );
+    return;
+  }
+
   if (!submission.extension.chromeWebStoreId) {
     throw new Error(
       `submission ${slug} has no extension.chromeWebStoreId — Tier 2 needs a published Web Store id`,
