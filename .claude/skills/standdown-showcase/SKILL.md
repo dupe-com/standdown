@@ -13,10 +13,12 @@ can't be faked. Your job is to produce a correct submission and open the PR.
 
 **Set expectations on the badge:** the showcase badge is tier-driven — a Tier 1
 (config-verified) entry earns an **A** badge, even at a perfect 100/100
-conformance score; **A+** requires Tier 2 (verifying the live published extension
-bundles the graded config), which is planned. So tell the user their badge will
-be **A** today, with an "upgrade to A+ on prod" path. Tier is CI-determined — never
-put a `tier` field in the submission (CI rejects it).
+conformance score. **A+** requires Tier 2: CI downloads the live published crx
+from the Chrome Web Store and confirms it bundles the graded config (matching
+inputs SHA). If the extension is live and its `chromeWebStoreId` is known, offer
+the Tier 2 flow (step 4 below) — otherwise the badge is **A**, with the A+ path
+open once it's on prod. Tier is CI-determined — never put a `tier` field in the
+submission (CI rejects it).
 
 ## Preconditions — confirm before starting
 
@@ -27,7 +29,7 @@ put a `tier` field in the submission (CI rejects it).
 2. Collect: extension **name**, **URL** (store listing or homepage), the
    **policy set** they bundle (`allPolicies`, `allPolicies+experimental`, or
    `custom`), any **disableHosts**, their **GitHub handle**, and — if they have
-   it — the **Chrome Web Store id** (records it for future live-source verify).
+   it — the **Chrome Web Store id** (required for Tier 2 / A+ live-source verify).
 3. Ask the user for **today's date** (`YYYY-MM-DD`) — the tooling has no clock.
 
 ## Steps
@@ -59,10 +61,26 @@ put a `tier` field in the submission (CI rejects it).
    npm run showcase:verify   # must pass
    ```
 
-4. **Open the PR.** Fork if needed, branch, and commit exactly three artifacts:
-   `showcase/submissions/<slug>.json`, `showcase/cards/<slug>.svg`, and the updated
-   `SHOWCASE.md`. Open a PR to `dupe-com/standdown` titled
-   `showcase: add <name> (<grade>)`. Note in the body that CI will re-verify.
+4. **(Optional) Reach A+ — Tier 2 live-verify.** Only if the extension is
+   published and you have its `chromeWebStoreId`. This downloads the live crx and
+   proves it bundles the graded config. It succeeds when either (a) the packaged
+   extension emits a `standdown.manifest.json` (recommended — see
+   `showcase/README.md` § "Reach A+"), or (b) the policy array ships as a
+   recoverable JSON asset (bundle-scan fallback).
+   ```sh
+   SLUG=<kebab-slug> DATE=<YYYY-MM-DD> npm run showcase:live-verify
+   npm run showcase:build     # re-renders the card as A+
+   ```
+   On success this writes `showcase/verifications/<slug>.json`. If it reports no
+   match, the config isn't live/recoverable yet — stay Tier 1 (A) and tell the
+   user how to reach A+ (add the manifest, publish, re-run). Never hand-write the
+   verification record — the live-verify CI job re-derives the SHA from the crx.
+
+5. **Open the PR.** Fork if needed, branch, and commit the generated artifacts:
+   `showcase/submissions/<slug>.json`, `showcase/cards/<slug>.svg`, the updated
+   `SHOWCASE.md`, and — if you did step 4 — `showcase/verifications/<slug>.json`.
+   Open a PR to `dupe-com/standdown` titled `showcase: add <name> (<grade>)`. Note
+   in the body that CI will re-verify.
 
 ## Rules
 

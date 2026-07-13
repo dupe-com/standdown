@@ -13,6 +13,7 @@ import {
   type Entry,
   listSubmissions,
   loadSubmission,
+  loadVerification,
   renderShowcaseCard,
   renderShowcaseMd,
   verifySubmission,
@@ -21,6 +22,7 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, '..', '..');
 const SUBS_DIR = join(REPO_ROOT, 'showcase', 'submissions');
+const VERIFS_DIR = join(REPO_ROOT, 'showcase', 'verifications');
 const CARDS_DIR = join(REPO_ROOT, 'showcase', 'cards');
 const MD_PATH = join(REPO_ROOT, 'SHOWCASE.md');
 
@@ -36,7 +38,8 @@ async function main(): Promise<void> {
       failed++;
       continue;
     }
-    const verdict = await verifySubmission(submission);
+    const verification = loadVerification(VERIFS_DIR, slug);
+    const verdict = await verifySubmission(submission, verification);
     if (!verdict.ok || !verdict.result || !verdict.computedSha || !verdict.tier) {
       console.error(`  ✗ ${slug}:\n${verdict.errors.map((e) => `      - ${e}`).join('\n')}`);
       failed++;
@@ -52,6 +55,7 @@ async function main(): Promise<void> {
       result: verdict.result,
       computedSha: verdict.computedSha,
       tier: verdict.tier,
+      verification,
     });
     console.log(
       `  ✓ ${slug}: badge ${verdict.tier === 2 ? 'A+' : 'A'} · conformance ${verdict.result.letter} (${verdict.result.score})`,

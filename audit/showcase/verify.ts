@@ -15,6 +15,7 @@ import {
   type Entry,
   listSubmissions,
   loadSubmission,
+  loadVerification,
   renderShowcaseCard,
   renderShowcaseMd,
   verifySubmission,
@@ -23,6 +24,7 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, '..', '..');
 const SUBS_DIR = join(REPO_ROOT, 'showcase', 'submissions');
+const VERIFS_DIR = join(REPO_ROOT, 'showcase', 'verifications');
 const CARDS_DIR = join(REPO_ROOT, 'showcase', 'cards');
 const MD_PATH = join(REPO_ROOT, 'SHOWCASE.md');
 
@@ -44,7 +46,8 @@ async function main(): Promise<void> {
       problems.push(`${slug}: slug field (${submission.slug}) must match filename`);
       continue;
     }
-    const verdict = await verifySubmission(submission);
+    const verification = loadVerification(VERIFS_DIR, slug);
+    const verdict = await verifySubmission(submission, verification);
     if (!verdict.ok || !verdict.result || !verdict.computedSha || !verdict.tier) {
       problems.push(`${slug}:\n    - ${verdict.errors.join('\n    - ')}`);
       continue;
@@ -62,6 +65,7 @@ async function main(): Promise<void> {
       result: verdict.result,
       computedSha: verdict.computedSha,
       tier: verdict.tier,
+      verification,
     });
     console.log(
       `  ✓ ${slug}: badge ${verdict.tier === 2 ? 'A+' : 'A'} · conformance ${verdict.result.letter} (${verdict.result.score})`,

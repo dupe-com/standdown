@@ -9,7 +9,7 @@ proved they stand down instead of hijacking existing attribution.
 | Badge | Tier | What CI proved |
 | --- | --- | --- |
 | **A** | Tier 1 — config-verified | Re-ran `conformanceGrade` on the declared policy inputs and reproduced the grade. |
-| **A+** | Tier 2 — live-verified _(planned)_ | Additionally confirmed the **published** extension bundles this policy set (Chrome Web Store source). |
+| **A+** | Tier 2 — live-verified | Additionally fetched the **published** crx from the Chrome Web Store and confirmed it bundles this exact policy set (matching inputs SHA). |
 
 A submission declares only its policy inputs;
 [`showcase-verify.yml`](./.github/workflows/showcase-verify.yml) recomputes the

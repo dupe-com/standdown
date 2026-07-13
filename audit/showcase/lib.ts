@@ -33,11 +33,45 @@ export type PolicySet = 'allPolicies' | 'allPolicies+experimental' | 'custom';
  */
 export type Tier = 1 | 2;
 
-export function determineTier(_submission: Submission): Tier {
-  // Tier 2 requires verifying the LIVE published extension's source actually
-  // bundles this policy set — not yet implemented, so every entry is Tier 1.
-  // When live-verify lands: return 2 iff extension.chromeWebStoreId is set AND
-  // the fetched crx's policy set matches this submission's inputs SHA.
+/** How a live verification recovered the shipped policy set from the crx. */
+export type LiveVerifyMethod = 'manifest' | 'bundle-scan';
+
+/**
+ * A live-verification record (`showcase/verifications/<slug>.json`): evidence
+ * that the *published* extension's crx bundles the exact graded policy set.
+ * Produced by `live-verify.ts` (network) and re-checked by the live-verify CI
+ * job. Tier 2 is granted offline iff `matchedInputsSha256` equals the paired
+ * submission's `inputsSha256` — so build/verify stay deterministic, while the
+ * SHA itself is un-fakeable (the network job re-derives it from the live crx).
+ */
+export interface LiveVerification {
+  schemaVersion: 1;
+  slug: string;
+  chromeWebStoreId: string;
+  /** How the shipped policy set was recovered from the crx. */
+  method: LiveVerifyMethod;
+  /** `version` field of the crx's own manifest.json at verification time. */
+  crxVersion: string;
+  /** sha256 of the resolved inputs recovered from the crx — must equal the submission's. */
+  matchedInputsSha256: string;
+  /** YYYY-MM-DD the live crx was fetched (scripts have no clock; passed in). */
+  verifiedOn: string;
+}
+
+/**
+ * Tier 2 iff a live-verification record exists AND the SHA it recovered from the
+ * published crx matches this submission's declared inputs SHA. A record that
+ * declares a non-matching (or absent) SHA leaves the entry at Tier 1. The record
+ * itself is validated against the live crx by the network CI job, not here.
+ */
+export function determineTier(submission: Submission, verification?: LiveVerification | null): Tier {
+  if (
+    verification &&
+    verification.slug === submission.slug &&
+    verification.matchedInputsSha256 === submission.inputsSha256
+  ) {
+    return 2;
+  }
   return 1;
 }
 
@@ -74,20 +108,35 @@ export interface ResolvedInputs {
   disableHosts: string[];
 }
 
-/** Resolve a submission's declared policy set to the concrete policy array. */
-export function resolveInputs(submission: Submission): ResolvedInputs {
-  const disableHosts = [...(submission.disableHosts ?? [])]
+/**
+ * A policy-set declaration in the shape both a submission and a crx's
+ * `standdown.manifest.json` share: a named set, or an inline resolved array.
+ */
+export interface DeclaredInputs {
+  policySet: PolicySet;
+  policies?: StanddownPolicy[];
+  disableHosts?: string[];
+}
+
+/**
+ * Resolve a declared policy set (`policySet` + optional inline `policies` +
+ * `disableHosts`) to the concrete, normalized policy array we hash. Shared by
+ * submission verification and live-crx verification so a submission's SHA and a
+ * crx-recovered SHA are computed identically.
+ */
+export function resolveDeclaredInputs(declared: DeclaredInputs): ResolvedInputs {
+  const disableHosts = [...(declared.disableHosts ?? [])]
     .map((host) => host.trim().toLowerCase())
     .filter(Boolean)
     .sort();
 
-  switch (submission.policySet) {
+  switch (declared.policySet) {
     case 'allPolicies':
       return { policies: allPolicies, disableHosts };
     case 'allPolicies+experimental':
       return { policies: [...allPolicies, ...experimentalPolicies], disableHosts };
     case 'custom': {
-      const policies = submission.policies ?? [];
+      const policies = declared.policies ?? [];
       if (policies.length === 0) {
         throw new Error("policySet 'custom' requires a non-empty `policies` array");
       }
@@ -95,8 +144,13 @@ export function resolveInputs(submission: Submission): ResolvedInputs {
       return { policies, disableHosts };
     }
     default:
-      throw new Error(`unknown policySet: ${String(submission.policySet)}`);
+      throw new Error(`unknown policySet: ${String(declared.policySet)}`);
   }
+}
+
+/** Resolve a submission's declared policy set to the concrete policy array. */
+export function resolveInputs(submission: Submission): ResolvedInputs {
+  return resolveDeclaredInputs(submission);
 }
 
 /** Recursively key-sorted JSON — a stable canonical form for hashing. */
@@ -134,7 +188,10 @@ export interface VerifyResult {
  * hijack, not inert). Returns the recomputed GradeResult so callers can render
  * the authoritative card.
  */
-export async function verifySubmission(submission: Submission): Promise<VerifyResult> {
+export async function verifySubmission(
+  submission: Submission,
+  verification?: LiveVerification | null,
+): Promise<VerifyResult> {
   const errors: string[] = [];
 
   if (submission.schemaVersion !== 1) {
@@ -186,7 +243,7 @@ export async function verifySubmission(submission: Submission): Promise<VerifyRe
     errors,
     result,
     computedSha,
-    tier: determineTier(submission),
+    tier: determineTier(submission, verification),
   };
 }
 
@@ -202,6 +259,13 @@ export function listSubmissions(dir: string): { slug: string; path: string }[] {
     .filter((f) => f.endsWith('.json'))
     .sort()
     .map((f) => ({ slug: f.replace(/\.json$/, ''), path: join(dir, f) }));
+}
+
+/** Load a slug's live-verification record if one exists, else null. */
+export function loadVerification(dir: string, slug: string): LiveVerification | null {
+  const path = join(dir, `${slug}.json`);
+  if (!existsSync(path)) return null;
+  return JSON.parse(readFileSync(path, 'utf8')) as LiveVerification;
 }
 
 /**
@@ -227,6 +291,7 @@ export interface Entry {
   result: GradeResult;
   computedSha: string;
   tier: Tier;
+  verification?: LiveVerification | null;
 }
 
 /** Render the full SHOWCASE.md gallery from verified entries. */
@@ -252,7 +317,13 @@ export function renderShowcaseMd(entries: Entry[], cardsRelDir = 'showcase/cards
         : '';
       const upgrade =
         e.tier === 1
-          ? '\n\n> ⬆️ **Upgrade to A+:** verify this on the live published extension (Tier 2, planned).'
+          ? '\n\n> ⬆️ **Upgrade to A+:** verify this on the live published extension — ' +
+            'see [showcase/README.md](./showcase/README.md#reach-a-tier-2).'
+          : '';
+      const live =
+        e.tier === 2 && e.verification
+          ? ` · live crx \`v${esc(e.verification.crxVersion)}\` (${esc(e.verification.method)}, ` +
+            `${esc(e.verification.verifiedOn)})`
           : '';
       return [
         `### ${name} — ${badge}`,
@@ -262,7 +333,7 @@ export function renderShowcaseMd(entries: Entry[], cardsRelDir = 'showcase/cards
         `✅ **Reproduced by standdown CI** · **${esc(tierLabel(e.tier))}** · ` +
           `conformance ${e.result.letter} (${e.result.score}/100) · ` +
           `inputs \`sha256:${e.computedSha.slice(0, 12)}\` · ` +
-          `${esc(s.policySet)} · submitted by ${esc(s.submittedBy)} · ${esc(s.date)}${cws}${upgrade}`,
+          `${esc(s.policySet)} · submitted by ${esc(s.submittedBy)} · ${esc(s.date)}${cws}${live}${upgrade}`,
         '',
       ].join('\n');
     })
@@ -279,7 +350,7 @@ proved they stand down instead of hijacking existing attribution.
 | Badge | Tier | What CI proved |
 | --- | --- | --- |
 | **A** | Tier 1 — config-verified | Re-ran \`conformanceGrade\` on the declared policy inputs and reproduced the grade. |
-| **A+** | Tier 2 — live-verified _(planned)_ | Additionally confirmed the **published** extension bundles this policy set (Chrome Web Store source). |
+| **A+** | Tier 2 — live-verified | Additionally fetched the **published** crx from the Chrome Web Store and confirmed it bundles this exact policy set (matching inputs SHA). |
 
 A submission declares only its policy inputs;
 [\`showcase-verify.yml\`](./.github/workflows/showcase-verify.yml) recomputes the

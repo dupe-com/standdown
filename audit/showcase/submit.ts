@@ -8,7 +8,7 @@
  *   SLUG            kebab-case id + filename stem (required)
  *   NAME            extension display name (required)
  *   URL             extension/site URL (optional)
- *   CWS_ID          Chrome Web Store id (optional; enables future live-verify)
+ *   CWS_ID          Chrome Web Store id (optional; required for Tier 2 / A+ live-verify)
  *   SUBMITTED_BY    github handle or name (required)
  *   POLICY_SET      allPolicies | allPolicies+experimental | custom  (default allPolicies)
  *   POLICIES_FILE   path to a JSON array of policies (required iff POLICY_SET=custom)

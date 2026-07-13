@@ -9,6 +9,8 @@
     "showcase:submit": "tsx showcase/submit.ts",
     "showcase:build": "tsx showcase/build.ts",
     "showcase:verify": "tsx showcase/verify.ts",
+    "showcase:live-verify": "tsx showcase/live-verify.ts",
+    "showcase:live-verify:check": "CHECK=1 tsx showcase/live-verify.ts",
     "fixtures:serve": "tsx fixtures/server.ts",
     "fixtures:selftest": "tsx fixtures/selftest.ts",
     "spike:mv3": "tsx spike/mv3-spike.ts"
@@ -18,6 +20,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
+    "fflate": "^0.8.2",
     "playwright": "^1.55.0",
     "tsx": "^4.20.0",
     "typescript": "^5.7.0",

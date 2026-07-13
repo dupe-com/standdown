@@ -10,8 +10,8 @@ The badge letter reflects the **verification tier**, not just the raw score:
 
 | Badge | Tier | What CI proved |
 | --- | --- | --- |
-| **A** | Tier 1 — config-verified | CI re-ran `conformanceGrade` on your declared policy inputs and reproduced the grade. Every eligible submission earns this today. |
-| **A+** | Tier 2 — live-verified _(planned)_ | CI additionally confirmed the **published** extension actually bundles this policy set (Chrome Web Store source). |
+| **A** | Tier 1 — config-verified | CI re-ran `conformanceGrade` on your declared policy inputs and reproduced the grade. |
+| **A+** | Tier 2 — live-verified | CI additionally downloaded your **published** crx from the Chrome Web Store and confirmed it bundles this exact policy set (matching inputs SHA). See [Reach A+ (Tier 2)](#reach-a-tier-2). |
 
 The top mark is earned by proving your *deployed* extension uses the graded
 config, so **Tier 1 caps at A**. Your true conformance score (e.g. `100/100`) is
@@ -35,10 +35,10 @@ trust the number. Instead:
 Because the grader and the card are deterministic, the card is always
 CI-authoritative. You control only the inputs; the grade follows from them.
 
-> **Scope of the guarantee.** This proves *your policy configuration decides
-> correctly*. It does not by itself prove your *shipped* extension uses that
-> configuration. Verifying against the live Chrome Web Store source is a planned
-> second tier (provide `chromeWebStoreId` now to be ready for it).
+> **Scope of the A (Tier 1) guarantee.** This proves *your policy configuration
+> decides correctly*. It does not by itself prove your *shipped* extension uses
+> that configuration — that's what **Tier 2 / A+** adds, by fetching the
+> published crx and re-deriving the SHA from it ([below](#reach-a-tier-2)).
 
 Only genuinely passing runs are eligible: **A-band, zero hijacks, non-inert.**
 
@@ -60,6 +60,11 @@ If POLICY_SET=custom, also pass POLICIES_FILE=<path to a JSON array of my polici
 Then run `npm run showcase:build`, and open a PR to dupe-com/standdown adding
 showcase/submissions/<slug>.json plus the generated card and SHOWCASE.md.
 CI will re-verify the grade from scratch.
+
+For an A+ (Tier 2) badge, if my extension is published and I have its Chrome Web
+Store id, also run `SLUG=<slug> DATE=<today> npm run showcase:live-verify`, then
+`npm run showcase:build` again, and include showcase/verifications/<slug>.json in
+the PR. See the "Reach A+ (Tier 2)" section of showcase/README.md.
 ```
 
 ## Or by hand
@@ -80,6 +85,61 @@ npm run showcase:verify     # the same check CI runs — must pass before you PR
 Then open a PR adding `showcase/submissions/<slug>.json`, `showcase/cards/<slug>.svg`,
 and the updated `SHOWCASE.md`.
 
+## Reach A+ (Tier 2)
+
+Tier 1 proves your *config* is right. **Tier 2 proves your _published_ extension
+actually ships it** — CI downloads your live crx straight from the Chrome Web
+Store (no API key) and re-derives the inputs SHA from it. A+ is granted only when
+that SHA equals your submission's. Prerequisite: `extension.chromeWebStoreId` set,
+and the graded config live on prod.
+
+There are two ways CI can recover your shipped policy set from the crx:
+
+**1. The `standdown.manifest.json` convention (recommended).** Have your build
+write a tiny JSON file into your packaged extension declaring the *resolved*
+policy set it ships:
+
+```jsonc
+// standdown.manifest.json — emitted at build time, next to your bundle
+{
+  "schemaVersion": 1,
+  "policySet": "custom",           // or "allPolicies" / "allPolicies+experimental"
+  "policies": [ /* the resolved StanddownPolicy[] you pass to the client */ ],
+  "disableHosts": ["ebay.com"],    // whatever you disable unconditionally
+  "standdownVersion": "0.2.6"
+}
+```
+
+CI hashes the `policies` + `disableHosts` from *this file* (never a label), so it
+can't be gamed by a version skew. One line in your build step:
+
+```ts
+import { writeFileSync } from 'node:fs';
+writeFileSync('dist/standdown.manifest.json', JSON.stringify({
+  schemaVersion: 1, policySet: 'custom', policies, disableHosts, standdownVersion: '0.2.6',
+}, null, 2));
+```
+
+**2. Bundle-scan fallback (zero effort, best-effort).** If you ship your policy
+array as a JSON asset (e.g. `dist/policies.json`), CI can often recover it by
+scanning the crx directly — no manifest needed. Heavily minified/inlined bundles
+won't be recoverable this way; add the manifest to guarantee Tier 2.
+
+Then run the live check locally and commit the record it writes:
+
+```sh
+SLUG=<your-slug> DATE=2026-07-13 npm run showcase:live-verify
+npm run showcase:build        # re-renders the card as A+
+```
+
+This fetches your live crx, confirms the match, and writes
+`showcase/verifications/<slug>.json`. Add that file (plus the regenerated card +
+`SHOWCASE.md`) to your PR. The [`showcase-live-verify`](../.github/workflows/showcase-live-verify.yml)
+job re-downloads the crx and re-derives the SHA on the PR, so a hand-written
+record can't unlock A+ — the live extension has to genuinely bundle the config.
+(A weekly cron re-checks merged records, so if you later ship a divergent version
+the A+ is revisited.)
+
 ## Submission schema (`showcase/submissions/<slug>.json`)
 
 | Field | Required | Notes |
@@ -88,7 +148,7 @@ and the updated `SHOWCASE.md`.
 | `slug` | ✓ | kebab-case; must equal the filename stem |
 | `extension.name` | ✓ | display name |
 | `extension.url` | | homepage / store listing |
-| `extension.chromeWebStoreId` | | enables future live-source verification |
+| `extension.chromeWebStoreId` | | required for Tier 2 / A+ live-source verification |
 | `submittedBy` | ✓ | your GitHub handle or name |
 | `policySet` | ✓ | `allPolicies` \| `allPolicies+experimental` \| `custom` |
 | `policies` | if custom | inline array of your `StanddownPolicy` objects (validated) |
