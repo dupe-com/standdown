@@ -12,6 +12,16 @@
   <a href="https://affiliatecoc.org"><img src="https://img.shields.io/badge/aligned-Affiliate%20CoC-F5A623?labelColor=1C1917" alt="aligned with the Affiliate Code of Conduct"></a>
 </p>
 
+<p align="center">
+  <a href="#set-it-up"><b>Set it up</b></a> ·
+  <a href="#what-makes-it-different">Why it's different</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#works-across-the-major-affiliate-networks">Networks</a> ·
+  <a href="#how-its-graded">Grading</a> ·
+  <a href="#prove-it-and-show-it-off">Showcase</a> ·
+  <a href="#documentation">Docs</a>
+</p>
+
 > [!WARNING]
 > **Alpha — expect bugs and breaking changes.** standdown is pre-1.0 and under
 > active development: the API may shift between minor versions and edge cases are
@@ -28,6 +38,58 @@
 developers who need to detect existing affiliate attribution, suppress competing
 activation, and prove that suppression decisions were made locally and
 deterministically. Built and maintained by [Dupe](https://dupe.com).
+
+## Set it up
+
+**Hand the whole integration to your coding agent — that's the supported path.**
+standdown makes revenue-affecting decisions across your extension's code, so the
+fastest and safest way in is to let a coding agent do the work: it reads your
+codebase, gates every place attribution fires, bundles, and grades the result.
+Paste this into your agent — **Claude Code, Codex, Cursor, opencode, Copilot** —
+pointed at your extension's repo:
+
+```text
+Set up standdown — the open-source affiliate stand-down library (npm package
+`standdown`, source https://github.com/dupe-com/standdown) — in this browser
+extension, so it stops hijacking affiliate attribution a partner already owns.
+Then grade and verify it. Read and follow, end to end, the official guide at
+https://raw.githubusercontent.com/dupe-com/standdown/main/AGENTS.md — it detects
+whether this is a fresh install or a migration of existing stand-down logic and
+branches accordingly. When you're done, report my conformance grade and keep
+fixing until it's an A or better.
+```
+
+That single prompt runs the whole loop — install, adapter choice, gating,
+bundling, and grading — and auto-switches to the shadow-mode
+[migration path](./ADOPTING.md) if your extension already has its own stand-down
+logic. The steps live in one place, [`AGENTS.md`](./AGENTS.md), so every agent
+follows the same playbook.
+
+> **Use a capable model.** This reasons about revenue-affecting control flow
+> across an unfamiliar codebase — run it on a frontier coding model (Claude Opus,
+> GPT-5.5, or equivalent). Lighter models miss firing points and mis-handle the
+> `degraded` gate; if you must use one, review the gating diff by hand and always
+> run the grader.
+
+**On Claude Code?** No checkout needed — install the skill into your personal
+skills, then just run `/standdown`:
+
+```sh
+mkdir -p ~/.claude/skills/standdown && curl -fsSL \
+  https://raw.githubusercontent.com/dupe-com/standdown/main/.claude/skills/standdown/SKILL.md \
+  -o ~/.claude/skills/standdown/SKILL.md
+```
+
+Restart Claude Code (personal skills load at session start), then run
+**`/standdown`** in your extension's repo. The skill pulls the live
+[`AGENTS.md`](./AGENTS.md) playbook itself, so it stays current without
+reinstalling. Same one-liner for the other two skills — swap the path to
+`skills/adopt-standdown` for a [migration](./ADOPTING.md) (`/adopt-standdown`) or
+`.claude/skills/standdown-showcase` to publish your grade (`/standdown-showcase`).
+
+**Wiring it by hand instead?** The full manual walkthrough and complete API
+reference — the five published surfaces, self-exemption, per-host disable, signed
+refresh, the `standdown/url` helper, interop — live in **[INSTALL.md](./INSTALL.md)**.
 
 ## What makes it different
 
@@ -111,45 +173,6 @@ and citations in [POLICIES.md](./POLICIES.md).
 
 > Network names and logos identify the stand-down policies each pack implements.
 > They don't imply endorsement, partnership, or certification by these networks.
-
-## Set it up — hand it to your coding agent
-
-**The supported path is agent-driven.** standdown makes revenue-affecting
-decisions across your extension's code, so the fastest and safest way in is to let
-a coding agent do the work: it reads your codebase, gates every place attribution
-fires, bundles, and grades the result. Paste this into your agent — **Claude Code,
-Codex, Cursor, opencode, Copilot** — pointed at your extension's repo:
-
-```text
-Set up the `standdown` affiliate stand-down library in this browser extension,
-then grade and verify it. Read and follow, end to end, the guide at
-https://raw.githubusercontent.com/dupe-com/standdown/main/AGENTS.md — it detects
-whether this is a fresh install or a migration of existing stand-down logic and
-branches accordingly. When you're done, report my conformance grade and keep
-fixing until it's an A or better.
-```
-
-That single prompt runs the whole loop — install, adapter choice, gating,
-bundling, and grading — and auto-switches to the shadow-mode
-[migration path](./ADOPTING.md) if your extension already has its own stand-down
-logic. The steps live in one place, [`AGENTS.md`](./AGENTS.md), so every agent
-follows the same playbook.
-
-> **Use a capable model.** This reasons about revenue-affecting control flow
-> across an unfamiliar codebase — run it on a frontier coding model (Claude Opus,
-> GPT-5.5, or equivalent). Lighter models miss firing points and mis-handle the
-> `degraded` gate; if you must use one, review the gating diff by hand and always
-> run the grader.
-
-**On Claude Code?** Skip the copy-paste — this repo ships ready-to-run skills.
-Copy [`.claude/skills/standdown`](./.claude/skills/standdown) into your project
-(or `~/.claude/skills/`) and run **`/standdown`**; for a migration, use
-[`skills/adopt-standdown`](./skills/adopt-standdown) / `/adopt-standdown`. Both
-drive the same `AGENTS.md`/`ADOPTING.md` playbook, so nothing diverges.
-
-**Wiring it by hand instead?** The full manual walkthrough and complete API
-reference — the five published surfaces, self-exemption, per-host disable, signed
-refresh, the `standdown/url` helper, interop — live in **[INSTALL.md](./INSTALL.md)**.
 
 ## How it's graded
 
