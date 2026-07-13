@@ -123,8 +123,9 @@ official guide at https://raw.githubusercontent.com/dupe-com/standdown/main/AGEN
 
 Do the full loop:
 1. `npm install standdown`.
-2. Pick the adapter: `standdown/webext` for a Chromium MV3 extension, or
-   `standdown/content` for Safari / content-script-only.
+2. Pick the adapter by permissions: `standdown/webext` if the extension holds
+   `webNavigation`/`webRequest`, otherwise `standdown/content` (Safari,
+   content-script-only, or any MV3 build without those permissions).
 3. Find every place this extension fires affiliate attribution (redirects, link
    rewrites, cookie writes) and gate each behind the stand-down decision — do
    nothing when `decision.standDown` is true.
@@ -150,6 +151,24 @@ the one you want into your project's `.claude/skills/` (or `~/.claude/skills/`)
 and run `/standdown` (or `/adopt-standdown`). Agents that read
 [`AGENTS.md`](./AGENTS.md) or
 [`llms.txt`](./llms.txt) get the same playbook automatically.
+
+## Choosing an adapter
+
+The choice is driven by **permissions, not manifest version** — an MV3 extension
+that can't hold (or add) `webNavigation`/`webRequest` must use `content`.
+
+| Your extension | Adapter |
+| --- | --- |
+| MV3 **with** `webNavigation`/`webRequest` (and willing to keep them) | `standdown/webext` |
+| MV3 **without** those permissions, or that can't add them, or whose detection already runs in a content script | `standdown/content` |
+| Safari, or any page-/content-script-only context | `standdown/content` |
+
+`createStanddown()` (the `webext` adapter) **requires** `chrome.webNavigation.onCommitted`
+and throws if it's absent — an adapter that observes no navigations would fail
+open. If you can't ship that permission, use `content`. Adding
+`webNavigation`/`webRequest` to an already-published extension can also trigger a
+permission re-prompt that disables it for existing users until they re-accept,
+which is often reason enough to choose `content`.
 
 ## Webext Quickstart
 
@@ -283,6 +302,31 @@ It is deliberately **network-precise, not host-blanket**, and monotone:
   exemption is even recorded while a stand-down is active).
 - A `disableHosts` match is immune — a hard-disabled host stands down regardless
   of any exemption.
+
+### A self-click param that clears every network
+
+A `selfPattern` only clears a stand-down for the network (or policy) it is
+**scoped** to via `networkId`/`policyId`. An **unscoped** pattern (neither set) is
+reported as a `selfMatch` but does **not** clear a third-party match — so it
+silently fails to exempt you. If your click param is global — it identifies *your*
+attribution against any network — scope one pattern per network:
+
+```ts
+import { allPolicies } from 'standdown/policies';
+
+const networkIds = [...new Set(allPolicies.map((p) => p.network.id))];
+const selfPatterns = networkIds.map((networkId) => ({
+  name: 'my_click_id',
+  value: '_mybrand',
+  match: 'contains' as const,
+  networkId,
+}));
+```
+
+Getting this wrong fails in the *safe* direction — an unscoped (ineffective)
+pattern means the library stands down on your **own** clicks — but that suppresses
+attribution you were entitled to, so it is a silent revenue leak. Expand across
+every network you ship a policy for.
 
 ## Core Usage
 
