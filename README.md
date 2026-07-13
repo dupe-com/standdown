@@ -49,8 +49,10 @@ Paste this into your agent — **Claude Code, Codex, Cursor, opencode, Copilot**
 pointed at your extension's repo:
 
 ```text
-Set up the `standdown` affiliate stand-down library in this browser extension,
-then grade and verify it. Read and follow, end to end, the guide at
+Set up standdown — the open-source affiliate stand-down library (npm package
+`standdown`, source https://github.com/dupe-com/standdown) — in this browser
+extension, so it stops hijacking affiliate attribution a partner already owns.
+Then grade and verify it. Read and follow, end to end, the official guide at
 https://raw.githubusercontent.com/dupe-com/standdown/main/AGENTS.md — it detects
 whether this is a fresh install or a migration of existing stand-down logic and
 branches accordingly. When you're done, report my conformance grade and keep
@@ -69,11 +71,21 @@ follows the same playbook.
 > `degraded` gate; if you must use one, review the gating diff by hand and always
 > run the grader.
 
-**On Claude Code?** Skip the copy-paste — this repo ships ready-to-run skills.
-Copy [`.claude/skills/standdown`](./.claude/skills/standdown) into your project
-(or `~/.claude/skills/`) and run **`/standdown`**; for a migration, use
-[`skills/adopt-standdown`](./skills/adopt-standdown) / `/adopt-standdown`. Both
-drive the same `AGENTS.md`/`ADOPTING.md` playbook, so nothing diverges.
+**On Claude Code?** No checkout needed — install the skill into your personal
+skills, then just run `/standdown`:
+
+```sh
+mkdir -p ~/.claude/skills/standdown && curl -fsSL \
+  https://raw.githubusercontent.com/dupe-com/standdown/main/.claude/skills/standdown/SKILL.md \
+  -o ~/.claude/skills/standdown/SKILL.md
+```
+
+Restart Claude Code (personal skills load at session start), then run
+**`/standdown`** in your extension's repo. The skill pulls the live
+[`AGENTS.md`](./AGENTS.md) playbook itself, so it stays current without
+reinstalling. Same one-liner for the other two skills — swap the path to
+`skills/adopt-standdown` for a [migration](./ADOPTING.md) (`/adopt-standdown`) or
+`.claude/skills/standdown-showcase` to publish your grade (`/standdown-showcase`).
 
 **Wiring it by hand instead?** The full manual walkthrough and complete API
 reference — the five published surfaces, self-exemption, per-host disable, signed
