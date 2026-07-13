@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  determineTier,
   inputsHash,
+  type LiveVerification,
   renderShowcaseCard,
   renderShowcaseMd,
   resolveInputs,
@@ -61,6 +63,51 @@ describe('showcase lib', () => {
   it('maps tier to badge: Tier 1 → A, Tier 2 → A+', () => {
     expect(tierBadge(1)).toBe('A');
     expect(tierBadge(2)).toBe('A+');
+  });
+
+  it('grants Tier 2 only for a verification record whose SHA matches the submission', async () => {
+    const sub = await validSubmission();
+    const matching: LiveVerification = {
+      schemaVersion: 1,
+      slug: sub.slug,
+      chromeWebStoreId: 'abc123',
+      method: 'manifest',
+      crxVersion: '1.2.3',
+      matchedInputsSha256: sub.inputsSha256,
+      verifiedOn: '2026-07-13',
+    };
+    expect(determineTier(sub, matching)).toBe(2);
+    // Wrong SHA, wrong slug, or no record all stay Tier 1.
+    expect(determineTier(sub, { ...matching, matchedInputsSha256: 'deadbeef' })).toBe(1);
+    expect(determineTier(sub, { ...matching, slug: 'someone-else' })).toBe(1);
+    expect(determineTier(sub, null)).toBe(1);
+
+    const verdict = await verifySubmission(sub, matching);
+    expect(verdict.ok).toBe(true);
+    expect(verdict.tier).toBe(2);
+  });
+
+  it('renders a Tier-2 gallery with an A+ badge, live crx provenance, and no upgrade CTA', async () => {
+    const sub = await validSubmission();
+    const inputs = resolveInputs(sub);
+    const { conformanceGrade } = await import('../grade/conformance.ts');
+    const { result } = await conformanceGrade({ policies: inputs.policies, disableHosts: inputs.disableHosts });
+    const verification: LiveVerification = {
+      schemaVersion: 1,
+      slug: sub.slug,
+      chromeWebStoreId: 'abc123',
+      method: 'manifest',
+      crxVersion: '4.5.6',
+      matchedInputsSha256: sub.inputsSha256,
+      verifiedOn: '2026-07-13',
+    };
+    const md = renderShowcaseMd([
+      { submission: sub, result, computedSha: sub.inputsSha256, tier: 2, verification },
+    ]);
+    expect(md).toContain(`### [${sub.extension.name}](${sub.extension.url}) — A+`);
+    expect(md).toContain('Tier 2 · verified on live extension');
+    expect(md).toContain('live crx `v4.5.6` (manifest, 2026-07-13)');
+    expect(md).not.toContain('Upgrade to A+');
   });
 
   it('rejects a faked grade', async () => {

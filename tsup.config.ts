@@ -6,6 +6,7 @@ export default defineConfig({
     policies: 'src/policies.ts',
     webext: 'src/webext.ts',
     content: 'src/content.ts',
+    url: 'src/url.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

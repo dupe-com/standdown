@@ -1,0 +1,37 @@
+name: Showcase live-verify (Tier 2)
+
+# The un-fakeable half of Tier 2. For every committed live-verification record,
+# re-downloads the PUBLISHED crx from the Chrome Web Store and re-derives the
+# policy-set SHA from it, asserting it still matches both the record and the
+# paired submission. A hand-written record (correct SHA, but the live extension
+# doesn't actually bundle that config) fails here. Needs network egress to
+# clients2.google.com; no secrets.
+#
+# NOTE: mark this job a required status check in branch protection so a PR that
+# adds/edits a verification record cannot merge without it passing.
+
+on:
+  pull_request:
+    paths:
+      - 'showcase/verifications/**'
+      - 'showcase/submissions/**'
+      - 'audit/showcase/crx.ts'
+      - 'audit/showcase/live-verify.ts'
+  workflow_dispatch: {}
+  # Weekly drift check: catch extensions that shipped a divergent version after merge.
+  schedule:
+    - cron: '17 8 * * 1'
+
+jobs:
+  live-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install
+      # The audit workspace imports the built `standdown` package via file:..
+      - run: bun run build
+      - name: Re-verify live crx for every verification record
+        run: cd audit && npm install && DATE=$(date -u +%F) npm run showcase:live-verify:check

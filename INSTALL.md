@@ -30,6 +30,7 @@ published, with types included. Extension contexts need a bundler (see
 | `standdown/policies` | Bundled policy packs and helpers |
 | `standdown/webext` | Manifest V3 background/service-worker adapter |
 | `standdown/content` | Content-script signal collector and evaluator |
+| `standdown/url` | URL-only decision helper for background/side-panel contexts (no live page) |
 
 ## Choosing an adapter
 
@@ -41,6 +42,7 @@ that can't hold (or add) `webNavigation`/`webRequest` must use `content`.
 | MV3 **with** `webNavigation`/`webRequest` (and willing to keep them) | `standdown/webext` |
 | MV3 **without** those permissions, or that can't add them, or whose detection already runs in a content script | `standdown/content` |
 | Safari, or any page-/content-script-only context | `standdown/content` |
+| A background worker or native side panel deciding from a **tab's URL** (no live page, no `document`, no first-party cookies) | `standdown/url` |
 
 `createStanddown()` (the `webext` adapter) **requires** `chrome.webNavigation.onCommitted`
 and throws if it's absent — an adapter that observes no navigations would fail
@@ -156,6 +158,44 @@ This is intentional and not configurable.
 24-hour envelope TTL by default. The TTL clears session records, not audit
 history; per-policy stand-down durations remain enforced by the core state
 machine.
+
+## URL adapter
+
+For surfaces that fire (or suppress) attribution from a **URL string** rather
+than a live page — a native side panel, or a background/service worker deciding
+whether to auto-load a monetized comparison for a tab's URL. These contexts have
+no `document`, can't read the merchant's cross-origin first-party cookies, and
+often don't observe the redirect chain.
+
+```ts
+import { allPolicies } from 'standdown/policies';
+import { createUrlStanddown } from 'standdown/url';
+
+const standdown = createUrlStanddown({
+  policies: allPolicies,
+  selfPatterns: [{ name: 'myclickid' }], // YOUR OWN attribution params
+  publisherSites: ['example-publisher.com'],
+});
+
+// referrer/initiator are optional — pass them when you know them.
+const decision = await standdown.decideForUrl(tabUrl, { referrer });
+if (decision.standDown) {
+  // a partner already owns this sale — do not auto-load / rewrite / redirect.
+}
+```
+
+`decideForUrl` collects signals from the URL (+ optional `referrer`/`initiator`)
+only — no cookies, no redirect chain — and shares the same policy set,
+self-exemption, and `disableHosts` semantics as the other adapters. Because the
+signal set is incomplete it **always reports `signalCoverage: 'partial'`**, so a
+non-stand-down decision carries `degraded: true` (see [Using the `Decision`
+correctly](#using-the-decision-correctly)). It **fails toward standing down** on
+a missing or malformed URL and on any collection error.
+
+State defaults to an in-memory store (fitting a stateless worker); pass a durable
+`store` to carry stand-downs across worker restarts. The lower-level
+`collectUrlSignals(url, opts)` is exported if you want to drive
+`StanddownSession.ingest` yourself.
 
 ## Core usage
 

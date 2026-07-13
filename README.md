@@ -162,7 +162,7 @@ you want into `.claude/skills/` (or `~/.claude/skills/`) and run `/standdown` (o
 
 **Prefer to wire it by hand?** The full manual walkthrough and complete API
 reference — adapters, quickstarts, self-exemption, per-host disable, signed
-refresh, interop — live in **[INSTALL.md](./INSTALL.md)**. The four published
+refresh, interop — live in **[INSTALL.md](./INSTALL.md)**. The five published
 surfaces:
 
 | Import | Purpose |
@@ -171,6 +171,7 @@ surfaces:
 | `standdown/policies` | Bundled policy packs and helpers |
 | `standdown/webext` | Manifest V3 background/service-worker adapter |
 | `standdown/content` | Content-script signal collector and evaluator |
+| `standdown/url` | URL-only decision helper for background/side-panel contexts |
 
 ## How it's graded
 
