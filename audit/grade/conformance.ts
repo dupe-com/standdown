@@ -15,6 +15,7 @@ import {
 } from '../fixtures/resolvePolicies.ts';
 import type { ScenarioObservation } from './harness.ts';
 import { grade, type GradeResult } from './rubric.ts';
+import { emitShareCard } from './share-card.ts';
 
 export interface ConformanceInput {
   policies: readonly StanddownPolicy[];
@@ -171,6 +172,7 @@ async function main(): Promise<void> {
   const PASS_SCORE = 90; // A
   const ok =
     !result.inert && result.hijacks.length === 0 && result.score >= PASS_SCORE;
+  emitShareCard(result);
   process.exit(ok ? 0 : 1);
 }
 

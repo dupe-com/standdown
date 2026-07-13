@@ -1,6 +1,6 @@
 # Grading your own extension (Phase 0 baseline conformance)
 
-This is the operator's guide for `grade/dupe-extension-probe.ts` — the black-box
+This is the operator's guide for `grade/host-extension-probe.ts` — the black-box
 probe that grades a host extension's **real** browser build against its Phase-0 baseline:
 the behavioral spec we must preserve before the `standdown` library is introduced
 as a shadow observer.
@@ -93,10 +93,10 @@ first CLI arg — nothing is hardcoded:
 ```bash
 # from standdown/audit
 EXT_PATH="/path/to/your-extension/.output/chrome-mv3" \
-  npx tsx grade/dupe-extension-probe.ts
+  npx tsx grade/host-extension-probe.ts
 
 # equivalently, as a positional arg:
-npx tsx grade/dupe-extension-probe.ts /path/to/your-extension/.output/chrome-mv3
+npx tsx grade/host-extension-probe.ts /path/to/your-extension/.output/chrome-mv3
 ```
 
 Useful env vars:

@@ -56,8 +56,8 @@ const VERBOSE = !!process.env.VERBOSE;
 
 if (!EXT_PATH) {
   console.error(
-    'usage: EXT_PATH=<path-to-unpacked-extension> tsx grade/dupe-extension-probe.ts\n' +
-      '   or: tsx grade/dupe-extension-probe.ts <path-to-unpacked-extension>\n\n' +
+    'usage: EXT_PATH=<path-to-unpacked-extension> tsx grade/host-extension-probe.ts\n' +
+      '   or: tsx grade/host-extension-probe.ts <path-to-unpacked-extension>\n\n' +
       'The path is the extension build output (e.g. apps/extension/.output/chrome-mv3).\n' +
       'No path is hardcoded — you MUST supply your own build dir.',
   );

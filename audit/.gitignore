@@ -2,3 +2,6 @@
 # Regenerated on every run — never commit.
 spike/ext-dist/
 node_modules/
+
+# Shareable grade card emitted by the graders on a passing run.
+standdown-grade.svg

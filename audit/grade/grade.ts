@@ -6,6 +6,7 @@ import { runAudit } from './harness.ts';
 import { grade, type GradeResult } from './rubric.ts';
 import type { ScenarioObservation } from './harness.ts';
 import { resolvePolicies, policySourceLabel } from '../fixtures/resolvePolicies.ts';
+import { emitShareCard } from './share-card.ts';
 
 export interface AuditReport {
   result: GradeResult;
@@ -47,7 +48,7 @@ async function main() {
         "  testexts speak. Real extensions usually activate by painting UI or opening\n" +
         "  a monetized tab, which this sensor can't see — so INERT on a real host\n" +
         '  extension most likely means "wrong sensor for this extension," not "dead\n' +
-        "  code.\" Grade a real host extension with grade/dupe-extension-probe.ts (see\n" +
+        "  code.\" Grade a real host extension with grade/host-extension-probe.ts (see\n" +
         "  audit/README.md).\n",
     );
   }
@@ -55,6 +56,7 @@ async function main() {
     const tag = o.passed ? 'ok  ' : o.expectedIntroduce ? 'MISS' : 'HIJACK';
     console.log(`  [${tag}] ${o.scenario.id.padEnd(34)} ${o.evidence}`);
   }
+  emitShareCard(result);
   process.exit(0);
 }
 

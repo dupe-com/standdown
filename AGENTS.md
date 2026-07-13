@@ -33,14 +33,22 @@ Step 4).
 
 ## Step 2 — Pick the adapter for your context
 
+The choice is driven by **permissions, not manifest version.**
+
 | Your context | Import | Entry |
 | --- | --- | --- |
-| Chromium **MV3** extension with `webRequest`/`webNavigation` | `standdown/webext` | `createStanddown()` |
-| Safari / reduced-permission / page or content-script only | `standdown/content` | `createContentStanddown()` |
+| MV3 extension that holds (and will keep) `webRequest`/`webNavigation` | `standdown/webext` | `createStanddown()` |
+| MV3 extension **without** those permissions, or that can't add them | `standdown/content` | `createContentStanddown()` |
+| Safari / page- or content-script-only | `standdown/content` | `createContentStanddown()` |
 | Non-extension or custom host | `standdown` | `StanddownSession` + `guardActivation` |
 
-Most Chrome extensions use **webext** in the background service worker and query
-it from content scripts/popup. Safari builds use **content**.
+**Decision rule:** if the extension does not already hold
+`webRequest`/`webNavigation`, use `content`. Do **not** add those permissions to
+an already-published extension just to reach for `webext` — doing so triggers a
+permission re-prompt that disables the extension for every existing user until
+they re-accept. `createStanddown()` also *throws* when `chrome.webNavigation.onCommitted`
+is absent (an adapter that observes no navigations would fail open), so `webext`
+without that permission is not an option regardless.
 
 ## Step 3 — Integrate
 
@@ -123,37 +131,56 @@ over-suppression is the safe direction.
 
 ## Step 5 — Build / bundle (extensions)
 
-Chrome does **not** resolve npm package subpath imports (`standdown/webext`) from
-service workers or popups. You **must bundle** before loading unpacked. See
-[`examples/mv3-extension`](./examples/mv3-extension) for a minimal, working MV3
-background + popup and the exact `esbuild` bundle command. Mirror that build for
-your extension, then load the bundled output unpacked and click through a
-partner flow to confirm you go quiet when attribution already exists.
+Chrome does **not** resolve npm package subpath imports (`standdown/webext`,
+`standdown/content`) from service workers, content scripts, or popups. You
+**must bundle** before loading unpacked. Two minimal, working references, each
+with the exact `esbuild` bundle command:
+
+- **webext adapter** → [`examples/mv3-extension`](./examples/mv3-extension)
+  (background worker + popup).
+- **content adapter** → [`examples/content-extension`](./examples/content-extension)
+  (a content script that gates on `decision.standDown` alone).
+
+Mirror whichever matches your adapter, then load the bundled output unpacked and
+click through a partner flow to confirm you go quiet when attribution already
+exists. Bundlers that resolve subpath imports themselves (WXT, Vite) handle this
+for you — no manual `esbuild` step needed.
 
 ## Step 6 — Grade conformance
 
-Prove the integrated extension actually stands down in a real browser (not just
-that unit tests pass). The grader is **not shipped in the npm package** — it
-lives in the standdown repo's `audit/` harness, so clone the repo to run it:
+Prove the integration actually stands down. The graders are **not shipped in the
+npm package** — they live in the standdown repo's `audit/` harness, so clone the
+repo to run them. Two graders, used in order:
+
+**1. `conformanceGrade` — the adopter grade (start here).** Deterministic and
+browser-free: it drives the policy set your extension bundles through the real
+decision engine over every network's attribution and positive-control scenarios
+and scores F→A+. This is the number to report — it's fast, needs no browser, and
+is the correct sensor for any real host extension. Pass `DISABLE_HOSTS` for any
+merchants you disable unconditionally.
 
 ```sh
 git clone https://github.com/dupe-com/standdown && cd standdown/audit && npm install
-npx tsx grade/grade.ts /path/to/your/unpacked-extension
-#   standdown grade: A+  (100/100)
+DISABLE_HOSTS="ebay.com,homedepot.com" npx tsx grade/conformance.ts
+#   standdown conformance grade: A+  (100/100)
 ```
 
-The rubric is F→A+ with an **inert cap**: an extension that never activates even
-when allowed can't score above a C (so "disciplined stand-down" can't be faked
-with dead code). Target **A/A+** with real activation on the positive controls.
+Target **A/A+**. The rubric has an **inert cap**: a policy set that never allows
+activation on any positive control can't score above a C, so "disciplined
+stand-down" can't be faked by suppressing everything.
 
-`grade.ts` detects activation by watching for a redirect to `/aff/:net?actor=` —
-the protocol the bundled testexts speak. Real extensions usually activate by
-painting UI or opening a monetized tab, which that sensor can't see, so a
-correctly integrated host extension can still score **C (inert)**. If that
-happens it almost always means "wrong sensor for this extension," not "dead
-code" — grade against the host-extension probe
-([`grade/dupe-extension-probe.ts`](./audit/README.md)) and watch for the shipped
-decision-conformance grader (tracked in issue #22).
+**2. `grade/grade.ts` — the in-browser testext sensor (optional).** Loads an
+unpacked extension into a real browser and detects activation by watching for a
+redirect to `/aff/:net?actor=`, the protocol the bundled *testexts* speak. Real
+host extensions activate by painting UI or opening a monetized tab, which that
+sensor can't see — so a correctly integrated host extension routinely scores
+**C (inert)** here. That means "wrong sensor for this extension," not "dead
+code." To sense a real extension's own activation black-box, adapt the template
+probe [`grade/host-extension-probe.ts`](./audit/docs/grading-your-own-extension.md)
+to assert on your extension's surface.
+
+Both CLIs print a shareable grade card — a terminal card plus an SVG you can
+post — when the run passes.
 
 ## Gotchas
 
@@ -169,7 +196,10 @@ decision-conformance grader (tracked in issue #22).
 
 ## Reference
 
-- `README.md` — full API, self-exemption scope, per-host disable, interop.
+- `README.md` — overview, how it works, the shareable grade card.
+- `INSTALL.md` — manual install + full API (adapters, self-exemption, per-host
+  disable, interop, signed refresh).
 - `POLICIES.md` — network policy citations.
-- `examples/mv3-extension` — working MV3 integration.
-- `audit/` — the conformance grader.
+- `examples/mv3-extension` — working webext integration.
+- `examples/content-extension` — working content-adapter integration.
+- `audit/` — the conformance graders (`conformance.ts`, `grade.ts`).
