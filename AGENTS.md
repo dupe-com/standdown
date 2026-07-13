@@ -189,6 +189,12 @@ post — when the run passes.
 - **Cookie matching is name-only** by design — rules match cookie *names*, never
   values (keeps user data out of signals). Porting a rule that matched a cookie
   *value* will silently not fire.
+- **Suffix domain rules aren't substrings.** A `kind: 'suffix'` `DomainRule`
+  matches a registrable domain: `'ebay.com'` matches `ebay.com` and `*.ebay.com`,
+  but a bare `'ebay.'` (or `'ebay'`) matches *nothing real*. Porting a legacy
+  substring list (`hostname.includes('ebay.')`) onto suffix rules silently makes
+  them inert — expand to full hosts (`ebay.com`, `ebay.de`, `ebay.com.au`, …) or
+  use `kind: 'regex'`. `validatePolicy` warns on bare-label suffixes.
 - **`allPolicies` is the verified set.** `experimentalPolicies` (skimlinks,
   partnerize) have inferred redirect domains — opt in only after verifying.
 - **`amazon` is detect-only** (`activation.mode: never`) — the guard never allows

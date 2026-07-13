@@ -177,6 +177,28 @@ function validateDomainRule(ruleValue: unknown): void {
     throw new TypeError('DomainRule.kind is invalid');
   }
 
+  if (rule.kind === 'suffix') {
+    // A suffix rule matches a registrable domain (`ebay.com` matches `ebay.com`
+    // and `*.ebay.com`). A bare single label — `ebay`, or `ebay.` which
+    // normalizes to `ebay` — matches only `*.ebay`, i.e. no real host. This is
+    // the classic mis-port of a substring domain list (`hostname.includes('ebay.')`)
+    // onto suffix rules, which silently makes the rule inert. Warn, don't throw:
+    // the rule is structurally valid, just almost certainly a mistake.
+    const normalized = rule.pattern
+      .toLowerCase()
+      .replace(/^\.+/, '')
+      .replace(/\.+$/, '');
+    if (normalized.length === 0 || !normalized.includes('.')) {
+      const example = normalized || 'example';
+      console.warn(
+        `standdown: DomainRule suffix pattern ${JSON.stringify(rule.pattern)} is a bare ` +
+          `label — suffix rules match registrable domains, so it will not match hosts ` +
+          `like "${example}.com". Did you port a substring rule? Use a full host ` +
+          `(e.g. "${example}.com") or kind: "regex".`,
+      );
+    }
+  }
+
   if (rule.kind === 'regex') {
     try {
       new RegExp(rule.pattern);
