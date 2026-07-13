@@ -11,6 +11,13 @@ inputs, and CI re-runs the grader to reproduce the grade and regenerate the card
 so only genuinely passing runs (A-band, zero hijacks, non-inert) get in, and cards
 can't be faked. Your job is to produce a correct submission and open the PR.
 
+**Set expectations on the badge:** the showcase badge is tier-driven — a Tier 1
+(config-verified) entry earns an **A** badge, even at a perfect 100/100
+conformance score; **A+** requires Tier 2 (verifying the live published extension
+bundles the graded config), which is planned. So tell the user their badge will
+be **A** today, with an "upgrade to A+ on prod" path. Tier is CI-determined — never
+put a `tier` field in the submission (CI rejects it).
+
 ## Preconditions — confirm before starting
 
 1. The extension already integrates standdown and **grades A or A+** on

@@ -90,9 +90,23 @@ function esc(s: string): string {
     .replace(/>/g, '&gt;');
 }
 
+export interface ShareSvgOptions {
+  /** Override the big grade letter in the ring (default: result.letter). */
+  letter?: string;
+  /** Override the subtitle under the score (default: "affiliate stand-down, graded"). */
+  caption?: string;
+  /** Override the accent color (default: derived from the score band). */
+  accent?: string;
+  /** Override the top-strip eyebrow (default: "STANDDOWN CONFORMANCE"). */
+  eyebrow?: string;
+}
+
 /** Self-contained 1200×630 SVG — no external fonts, no remote assets. */
-export function renderShareSvg(result: GradeResult): string {
-  const accent = accentFor(result.score);
+export function renderShareSvg(result: GradeResult, opts: ShareSvgOptions = {}): string {
+  const accent = opts.accent ?? accentFor(result.score);
+  const letter = opts.letter ?? result.letter;
+  const caption = opts.caption ?? 'affiliate stand-down, graded';
+  const eyebrow = opts.eyebrow ?? 'STANDDOWN CONFORMANCE';
   const font =
     "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
   const rows = bullets(result)
@@ -103,14 +117,14 @@ export function renderShareSvg(result: GradeResult): string {
     )
     .join('\n    ');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="standdown conformance grade ${esc(result.letter)}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="standdown grade ${esc(letter)}">
   <rect width="1200" height="630" fill="#1C1917"/>
   <rect x="0" y="0" width="1200" height="10" fill="${accent}"/>
-  <text x="90" y="130" font-family="${font}" font-size="30" fill="#8A8175" letter-spacing="3">STANDDOWN CONFORMANCE</text>
+  <text x="90" y="130" font-family="${font}" font-size="30" fill="#8A8175" letter-spacing="3">${esc(eyebrow)}</text>
   <circle cx="945" cy="235" r="150" fill="none" stroke="${accent}" stroke-width="14"/>
-  <text x="945" y="235" font-family="${font}" font-size="150" font-weight="800" fill="${accent}" text-anchor="middle" dominant-baseline="central">${esc(result.letter)}</text>
+  <text x="945" y="235" font-family="${font}" font-size="150" font-weight="800" fill="${accent}" text-anchor="middle" dominant-baseline="central">${esc(letter)}</text>
   <text x="90" y="250" font-family="${font}" font-size="150" font-weight="800" fill="#F7F5F2">${result.score}<tspan font-size="70" fill="#8A8175">/100</tspan></text>
-  <text x="90" y="315" font-family="${font}" font-size="28" fill="#8A8175">affiliate stand-down, graded</text>
+  <text x="90" y="315" font-family="${font}" font-size="28" fill="#8A8175">${esc(caption)}</text>
   ${rows}
   <line x1="90" y1="560" x2="1110" y2="560" stroke="#3A342E" stroke-width="1"/>
   <text x="90" y="600" font-family="${font}" font-size="24" fill="#8A8175">${CREDIT}</text>

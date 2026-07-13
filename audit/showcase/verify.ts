@@ -15,7 +15,7 @@ import {
   type Entry,
   listSubmissions,
   loadSubmission,
-  renderCard,
+  renderShowcaseCard,
   renderShowcaseMd,
   verifySubmission,
 } from './lib.ts';
@@ -45,20 +45,27 @@ async function main(): Promise<void> {
       continue;
     }
     const verdict = await verifySubmission(submission);
-    if (!verdict.ok || !verdict.result || !verdict.computedSha) {
+    if (!verdict.ok || !verdict.result || !verdict.computedSha || !verdict.tier) {
       problems.push(`${slug}:\n    - ${verdict.errors.join('\n    - ')}`);
       continue;
     }
 
     const committedCard = read(join(CARDS_DIR, `${slug}.svg`));
-    if (committedCard !== renderCard(verdict.result)) {
+    if (committedCard !== renderShowcaseCard(verdict.result, verdict.tier)) {
       problems.push(
         `${slug}: committed card SVG does not match the regenerated card — ` +
           `run \`npm run showcase:build\` and commit the result (do not hand-edit cards).`,
       );
     }
-    entries.push({ submission, result: verdict.result, computedSha: verdict.computedSha });
-    console.log(`  ✓ ${slug}: ${verdict.result.letter} (${verdict.result.score})`);
+    entries.push({
+      submission,
+      result: verdict.result,
+      computedSha: verdict.computedSha,
+      tier: verdict.tier,
+    });
+    console.log(
+      `  ✓ ${slug}: badge ${verdict.tier === 2 ? 'A+' : 'A'} · conformance ${verdict.result.letter} (${verdict.result.score})`,
+    );
   }
 
   if (read(MD_PATH) !== renderShowcaseMd(entries)) {

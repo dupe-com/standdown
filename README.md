@@ -212,9 +212,11 @@ your working directory that you can post anywhere:
 </p>
 
 Graded A/A+? **Add your extension to the [showcase](./SHOWCASE.md)** — a wall of
-fame where every grade is *reproduced by CI* (a submission declares its policy
+fame where every badge is *reproduced by CI* (a submission declares its policy
 inputs; CI re-runs the grader and regenerates the card, so nothing can be faked).
-One prompt opens the PR — see [`showcase/README.md`](./showcase/README.md).
+The badge is tiered: a config-verified entry earns an **A**, and verifying the
+live published extension unlocks **A+**. One prompt opens the PR — see
+[`showcase/README.md`](./showcase/README.md).
 
 ## Public commitments
 

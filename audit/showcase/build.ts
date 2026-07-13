@@ -8,12 +8,12 @@
  */
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import {
   type Entry,
   listSubmissions,
   loadSubmission,
-  renderCard,
+  renderShowcaseCard,
   renderShowcaseMd,
   verifySubmission,
 } from './lib.ts';
@@ -25,6 +25,7 @@ const CARDS_DIR = join(REPO_ROOT, 'showcase', 'cards');
 const MD_PATH = join(REPO_ROOT, 'SHOWCASE.md');
 
 async function main(): Promise<void> {
+  mkdirSync(CARDS_DIR, { recursive: true });
   const entries: Entry[] = [];
   let failed = 0;
 
@@ -36,14 +37,25 @@ async function main(): Promise<void> {
       continue;
     }
     const verdict = await verifySubmission(submission);
-    if (!verdict.ok || !verdict.result || !verdict.computedSha) {
+    if (!verdict.ok || !verdict.result || !verdict.computedSha || !verdict.tier) {
       console.error(`  ✗ ${slug}:\n${verdict.errors.map((e) => `      - ${e}`).join('\n')}`);
       failed++;
       continue;
     }
-    writeFileSync(join(CARDS_DIR, `${slug}.svg`), renderCard(verdict.result), 'utf8');
-    entries.push({ submission, result: verdict.result, computedSha: verdict.computedSha });
-    console.log(`  ✓ ${slug}: ${verdict.result.letter} (${verdict.result.score})`);
+    writeFileSync(
+      join(CARDS_DIR, `${slug}.svg`),
+      renderShowcaseCard(verdict.result, verdict.tier),
+      'utf8',
+    );
+    entries.push({
+      submission,
+      result: verdict.result,
+      computedSha: verdict.computedSha,
+      tier: verdict.tier,
+    });
+    console.log(
+      `  ✓ ${slug}: badge ${verdict.tier === 2 ? 'A+' : 'A'} · conformance ${verdict.result.letter} (${verdict.result.score})`,
+    );
   }
 
   writeFileSync(MD_PATH, renderShowcaseMd(entries), 'utf8');

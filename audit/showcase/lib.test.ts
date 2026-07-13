@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   inputsHash,
+  renderShowcaseCard,
   renderShowcaseMd,
   resolveInputs,
   type Submission,
+  tierBadge,
   verifySubmission,
 } from './lib.ts';
 
@@ -42,10 +44,23 @@ describe('showcase lib', () => {
     expect(inputsHash(a)).toBe(inputsHash(b));
   });
 
-  it('verifies a correctly-declared submission', async () => {
+  it('verifies a correctly-declared submission and assigns Tier 1', async () => {
     const verdict = await verifySubmission(await validSubmission());
     expect(verdict.ok).toBe(true);
     expect(verdict.result?.letter).toBe('A+');
+    expect(verdict.tier).toBe(1); // Tier 2 (live-verify) not yet implemented
+  });
+
+  it('rejects a self-claimed tier', async () => {
+    const sub = { ...(await validSubmission()), tier: 2 } as unknown as Submission;
+    const verdict = await verifySubmission(sub);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.errors.join(' ')).toMatch(/determined by CI/);
+  });
+
+  it('maps tier to badge: Tier 1 → A, Tier 2 → A+', () => {
+    expect(tierBadge(1)).toBe('A');
+    expect(tierBadge(2)).toBe('A+');
   });
 
   it('rejects a faked grade', async () => {
@@ -71,14 +86,32 @@ describe('showcase lib', () => {
     expect((await verifySubmission(unknown)).ok).toBe(false);
   });
 
-  it('renders a gallery that references the CI-authoritative card and SHA', async () => {
+  it('renders a Tier-1 gallery with an A badge, the real conformance score, and the card/SHA', async () => {
     const sub = await validSubmission();
     const inputs = resolveInputs(sub);
     const { conformanceGrade } = await import('../grade/conformance.ts');
     const { result } = await conformanceGrade({ policies: inputs.policies, disableHosts: inputs.disableHosts });
-    const md = renderShowcaseMd([{ submission: sub, result, computedSha: sub.inputsSha256 }]);
+    const md = renderShowcaseMd([
+      { submission: sub, result, computedSha: sub.inputsSha256, tier: 1 },
+    ]);
     expect(md).toContain('Reproduced by standdown CI');
+    expect(md).toContain('Tier 1 · config-verified');
+    expect(md).toContain(`### [${sub.extension.name}](${sub.extension.url}) — A`); // badge caps at A
+    expect(md).toContain(`conformance ${result.letter} (${result.score}/100)`); // true score still shown
+    expect(md).toContain('Upgrade to A+');
     expect(md).toContain('showcase/cards/acme-saver.svg');
     expect(md).toContain(sub.inputsSha256.slice(0, 12));
+  });
+
+  it('renders a card whose badge letter is tier-driven, not the raw grade', async () => {
+    const { result } = { result: { score: 100, letter: 'A+', inert: false, standDownRate: 1, controlActivateRate: 1, hijacks: [], total: 20, passed: 20, note: '' } };
+    const t1 = renderShowcaseCard(result, 1);
+    const t2 = renderShowcaseCard(result, 2);
+    expect(t1).toContain('GRADED WITH STANDDOWN');
+    expect(t1).toContain('Tier 1 · config-verified');
+    // ring badge is A for tier 1 even though the conformance letter is A+
+    expect(t1).toMatch(/dominant-baseline="central">A</);
+    expect(t2).toMatch(/dominant-baseline="central">A\+</);
+    expect(t2).toContain('Tier 2 · verified on live extension');
   });
 });

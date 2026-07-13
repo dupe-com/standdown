@@ -3,21 +3,22 @@
 Extensions that ran the [standdown](./README.md) affiliate conformance grader and
 proved they stand down instead of hijacking existing attribution.
 
-**Every grade here is reproduced by CI.** A submission declares only its policy
-inputs; [`showcase-verify.yml`](./.github/workflows/showcase-verify.yml) re-runs
-`conformanceGrade` on those inputs, regenerates the card, and rejects any
-mismatch — so the number can't be faked and the card can't be hand-edited. See
-[`showcase/README.md`](./showcase/README.md) to add yours (one prompt, one PR).
+**Every badge here is reproduced by CI**, and the letter reflects the
+**verification tier**:
 
-> The grade proves a policy configuration decides correctly. It does not by itself
-> prove the *deployed* extension uses that configuration — live-extension
-> verification (Chrome Web Store source) is a planned second tier.
+| Badge | Tier | What CI proved |
+| --- | --- | --- |
+| **A** | Tier 1 — config-verified | Re-ran `conformanceGrade` on the declared policy inputs and reproduced the grade. |
+| **A+** | Tier 2 — live-verified _(planned)_ | Additionally confirmed the **published** extension bundles this policy set (Chrome Web Store source). |
+
+A submission declares only its policy inputs;
+[`showcase-verify.yml`](./.github/workflows/showcase-verify.yml) recomputes the
+grade + SHA and regenerates the card, rejecting any mismatch — the number can't be
+faked and the card can't be hand-edited. The top mark (**A+**) is earned by
+proving the *deployed* extension actually uses the graded config, so Tier 1 caps
+at **A**. See [`showcase/README.md`](./showcase/README.md) to add yours (one
+prompt, one PR).
 
 ---
 
-### [standdown reference (allPolicies baseline)](https://github.com/dupe-com/standdown) — A+ (100/100)
-
-<img src="showcase/cards/standdown-reference-baseline.svg" alt="standdown grade A+ for standdown reference (allPolicies baseline)" width="520">
-
-✅ **Reproduced by standdown CI** · inputs `sha256:85225d2cd7cc` · allPolicies+experimental · submitted by dupe-com · 2026-07-13
-
+_No submissions yet — be the first: see [showcase/README.md](./showcase/README.md)._

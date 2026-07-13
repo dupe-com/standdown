@@ -4,6 +4,21 @@ A wall of fame for extensions that ran the [conformance grader](../audit) and
 proved they stand down instead of hijacking existing affiliate attribution. The
 gallery lives at [`SHOWCASE.md`](../SHOWCASE.md).
 
+## Badges — A vs A+
+
+The badge letter reflects the **verification tier**, not just the raw score:
+
+| Badge | Tier | What CI proved |
+| --- | --- | --- |
+| **A** | Tier 1 — config-verified | CI re-ran `conformanceGrade` on your declared policy inputs and reproduced the grade. Every eligible submission earns this today. |
+| **A+** | Tier 2 — live-verified _(planned)_ | CI additionally confirmed the **published** extension actually bundles this policy set (Chrome Web Store source). |
+
+The top mark is earned by proving your *deployed* extension uses the graded
+config, so **Tier 1 caps at A**. Your true conformance score (e.g. `100/100`) is
+still shown alongside the badge — a perfect config with an A badge just means
+"prove it on prod for the A+." Tier is **CI-determined**; a submission cannot
+claim it.
+
 ## How verification works (why the grades here are trustworthy)
 
 standdown runs entirely client-side, so a grade card generated on your machine is
