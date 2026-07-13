@@ -32,7 +32,10 @@ export interface ConformanceReport {
 export async function conformanceGrade(
   input: ConformanceInput,
 ): Promise<ConformanceReport> {
-  const disableHosts = input.disableHosts ?? [];
+  // Normalize to lowercase: URL hostnames are lowercased by the URL parser, so
+  // an uppercase disable host (e.g. `EBAY.COM` from an env var) would otherwise
+  // match neither the injected suffix policy nor the control reclassification.
+  const disableHosts = (input.disableHosts ?? []).map((h) => h.toLowerCase());
   const scenarios = [
     ...buildScenarios(input.policies),
     ...disableHostScenarios(disableHosts),
@@ -52,9 +55,9 @@ export async function conformanceGrade(
       introducedAttribution,
       expectedIntroduce,
       passed: introducedAttribution === expectedIntroduce,
-      evidence: decision.standDown
-        ? 'stood down'
-        : 'decision allows activation',
+      // ingest() decides stand-down only; whether activation is ultimately
+      // allowed is a separate guardActivation() concern (e.g. activation.mode).
+      evidence: decision.standDown ? 'stood down' : 'no stand-down',
     });
   }
 
@@ -161,7 +164,14 @@ async function main(): Promise<void> {
     );
   }
 
-  process.exit(result.inert || result.hijacks.length > 0 ? 1 : 0);
+  // CI gate: fail on every failure mode the grade encodes — an inert pack, any
+  // hijack (activated where it must stand down), or an overall grade below the A
+  // band. The score threshold is what catches MISSes (over-suppression on
+  // positive controls), which don't register as hijacks or inertness.
+  const PASS_SCORE = 90; // A
+  const ok =
+    !result.inert && result.hijacks.length === 0 && result.score >= PASS_SCORE;
+  process.exit(ok ? 0 : 1);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main();

@@ -46,6 +46,21 @@ describe('conformanceGrade', () => {
     expect(result.letter).toMatch(/^A/);
     expect(result.hijacks).toHaveLength(0);
   });
+
+  it('matches disable hosts case-insensitively', async () => {
+    // URL hostnames are lowercased by the parser; an uppercase disable host
+    // (e.g. from an env var) must still apply.
+    const { observations } = await conformanceGrade({
+      policies: allPolicies,
+      disableHosts: ['EBAY.COM'],
+    });
+    const disableObs = observations.find(
+      ({ scenario }) => scenario.id === 'ebay.com:disable-host',
+    );
+
+    expect(disableObs?.passed).toBe(true);
+    expect(disableObs?.evidence).toBe('stood down');
+  });
 });
 
 describe('StanddownSession persistence used by conformance adopters', () => {
