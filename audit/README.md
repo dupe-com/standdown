@@ -78,6 +78,21 @@ that's needed — no affiliate identifiers or scenarios are hardcoded on this pa
 (The module must be resolvable by `tsx`, i.e. run this from a project where your
 pack and its imports resolve — normally your own repo.)
 
+## Grading the decision (no browser, CI-able)
+
+`grade/conformance.ts` grades an adopter's policy set directly against the
+deterministic fixture scenario matrix using `StanddownSession`. It needs no
+browser or Playwright, so it can run in CI where black-box extension probes are
+inconclusive. Use `conformanceGrade({ policies, disableHosts, extraScenarios })`
+from TypeScript, or run the repo-clone-only CLI:
+
+```sh
+POLICY_PACK=./my-packs.ts DISABLE_HOSTS=ebay.com,homedepot.com npx tsx grade/conformance.ts
+```
+
+This grades the decision an adopter owns. It complements, rather than replaces,
+the black-box probes that verify a built extension actually obeys that decision.
+
 > **Scope of the activation sensor.** The grader detects an "activation" as a
 > request to the fixture's own affiliate endpoint (`/aff/…?actor=`) — the shape
 > the reference extensions use. It reliably catches **hijacks** (competing

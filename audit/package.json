@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Eval harness and F→A+ grading for browser-extension affiliate stand-down (standdown).",
   "scripts": {
+    "test": "vitest run",
     "fixtures:serve": "tsx fixtures/server.ts",
     "fixtures:selftest": "tsx fixtures/selftest.ts",
     "spike:mv3": "tsx spike/mv3-spike.ts"
@@ -16,6 +17,7 @@
     "esbuild": "^0.25.0",
     "playwright": "^1.55.0",
     "tsx": "^4.20.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
   }
 }

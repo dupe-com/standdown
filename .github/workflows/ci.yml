@@ -22,4 +22,8 @@ jobs:
       - run: bun run lint
       - run: bun run test
       - run: bun run build
+      # The audit harness is a separate workspace that imports the built
+      # `standdown` package via file:.. — run its suite after the build.
+      - name: Audit harness tests
+        run: cd audit && npm install && npm test
       - run: bun run policies-cite-check
