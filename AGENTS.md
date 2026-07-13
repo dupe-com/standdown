@@ -22,6 +22,25 @@ side effects. Keep these invariants intact when you integrate:
   login state into it.
 - **Fail toward standing down.** On unknown/ambiguous/error states, suppress.
 
+## Step 0 — Greenfield or brownfield?
+
+Decide which integration this is **before touching code**:
+
+- **Brownfield** — the extension **already** has its own affiliate stand-down /
+  attribution logic: a disable/merchant list, `ignore_param` or self-click
+  handling, cookie- or param-based stand-down checks, a `FALLBACK_POLICY`, or any
+  "stand down" / "suppress" code. **Stop and follow
+  [`ADOPTING.md`](./ADOPTING.md) instead.** It moves the existing decision path
+  onto standdown **in shadow mode** — running both in parallel and proving they
+  agree before cutover — so no live commission is put at risk. Do **not** do the
+  greenfield steps below.
+- **Greenfield** — no existing stand-down logic. Continue with Step 1.
+
+Grep to decide: affiliate params (`cjevent`, `ranSiteID`, `irgwc`, `mkcid`,
+`awc`), redirect/link-rewrite/cookie-write code, and the words "stand down",
+"suppress", or "disable". Any real hit → treat it as brownfield and switch to
+`ADOPTING.md`.
+
 ## Step 1 — Install
 
 ```sh

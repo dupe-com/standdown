@@ -11,12 +11,11 @@ name: Showcase live-verify (Tier 2)
 # adds/edits a verification record cannot merge without it passing.
 
 on:
-  pull_request:
-    paths:
-      - 'showcase/verifications/**'
-      - 'showcase/submissions/**'
-      - 'audit/showcase/crx.ts'
-      - 'audit/showcase/live-verify.ts'
+  # Runs on EVERY PR (not path-filtered) so it always reports — this job is a
+  # required status check, and a path-filtered required check silently blocks any
+  # PR that doesn't touch those paths. It's cheap when there's nothing to verify:
+  # with no verification records the check exits in seconds ("nothing to check").
+  pull_request: {}
   workflow_dispatch: {}
   # Weekly drift check: catch extensions that shipped a divergent version after merge.
   schedule:

@@ -3,144 +3,49 @@ name: standdown
 description: Integrate the `standdown` affiliate stand-down library into a browser extension and grade its conformance F→A+. Use when the user wants their extension to stop hijacking existing affiliate attribution (stand down when a partner already owns the sale), when they ask to "add standdown" / "install standdown", or when they want to grade/verify an extension's stand-down behavior.
 ---
 
-# standdown: install → integrate → verify → grade
+# standdown: install → integrate → grade
 
-Drive the full loop of adopting the [`standdown`](https://www.npmjs.com/package/standdown)
-library in a browser extension, then prove it works with the conformance grader.
-`standdown` is **advisory**: it returns a `Decision`; your code performs (or
-suppresses) the side effect. Never break these invariants while integrating:
-decisions stay local and synchronous (no network in the decision path), signals
-exclude user identity, and everything fails toward standing down.
+Thin router. **[`AGENTS.md`](../../../AGENTS.md) at the repo root is the source of
+truth** for the greenfield integration loop — install, pick the adapter, gate every
+attribution firing point on `decision.standDown`, bundle, and grade with
+`conformanceGrade`. Do not summarize those steps from memory; read the file and
+follow it exactly, in order. (If the standdown repo isn't already local, fetch the
+raw file: `https://raw.githubusercontent.com/dupe-com/standdown/main/AGENTS.md`.)
 
-Work through the phases in order. Confirm the context with the user before
-editing; report what changed at the end.
+## What to do
 
-## Phase 0 — Understand the target
+1. **Confirm the branch first (AGENTS.md Step 0).** If the extension ALREADY has
+   its own stand-down / affiliate-attribution logic (a disable list,
+   `ignore_param`/self-click handling, cookie or param stand-down checks, a
+   `FALLBACK_POLICY`, or "stand down"/"suppress" code), this is **brownfield** —
+   STOP and use the [`adopt-standdown`](../../../skills/adopt-standdown/SKILL.md)
+   skill / [`ADOPTING.md`](../../../ADOPTING.md) instead (shadow-mode migration,
+   parity before cutover). Only proceed here for a **greenfield** install.
 
-Inspect the extension you're integrating into and determine:
+2. **Drive AGENTS.md Steps 1–6 in order** against the user's extension: confirm the
+   target, install, pick the adapter *by permissions* (never add
+   `webRequest`/`webNavigation` to a published extension), integrate at the real
+   activation site, bundle, then grade.
 
-- **Manifest version + browser.** Chromium MV3 vs Safari/other.
-- **Does it have `webRequest` + `webNavigation` permissions?** Check `manifest.json`.
-- **Where affiliate activation happens today** — the code that redirects, rewrites
-  links, or drops cookies (grep for `webRequest`, `redirect`, affiliate params like
-  `cjevent`/`ranSiteID`, cookie writes). That is what must be gated behind a
-  stand-down check.
+3. **Grade with `conformanceGrade` — the authoritative number** (AGENTS.md Step 6):
+   `cd standdown/audit && npm install && DISABLE_HOSTS="<hosts you disable>" npx tsx grade/conformance.ts`.
+   Target **A/A+**; fix anything below A and re-grade. `grade/grade.ts` (the
+   in-browser testext sensor) is optional and routinely reads **C (inert)** on real
+   host extensions — do not report it as the grade.
 
-State which adapter applies (Phase 2) before writing code.
+## Rules
 
-## Phase 1 — Install
+- **Never break the invariants:** decisions stay local and synchronous (no network
+  in the decision path), signals exclude user identity, everything fails toward
+  standing down.
+- **Confirm context before editing**, and report what changed (adapter, gated
+  files, build command, final grade) at the end.
+- **Don't restate AGENTS.md here** — if it and this file ever disagree, AGENTS.md
+  wins; fix the drift rather than following the stale copy.
 
-```sh
-npm install standdown
-```
+## Related
 
-Zero runtime deps; ESM + CJS; Node ≥18. No `@types/chrome` needed (the library
-models the `chrome.*` surface itself).
-
-## Phase 2 — Pick the adapter
-
-| Context | Import specifier | Factory |
-| --- | --- | --- |
-| Chromium MV3 with `webRequest`/`webNavigation` | `standdown/webext` | `createStanddown()` |
-| Safari / reduced-permission / content-script only | `standdown/content` | `createContentStanddown()` |
-| Non-extension / custom host | `standdown` | `new StanddownSession()` + `guardActivation()` |
-
-Use import specifiers exactly as written — never deep `dist/` paths.
-
-## Phase 3 — Integrate
-
-**Webext** — in the background service worker:
-
-```ts
-import { allPolicies } from 'standdown/policies';
-import { createStanddown } from 'standdown/webext';
-
-const standdown = createStanddown({
-  policies: allPolicies,
-  selfPatterns: [{ name: 'YOUR_click_id_param', networkId: 'cj' }], // your own attribution
-  publisherSites: ['your-site.com'],
-});
-```
-
-`createStanddown()` **throws if `chrome.webNavigation.onCommitted` is absent** —
-ensure the permission is present. It auto-registers a message handler. Gate your
-activation from the content script / popup:
-
-```ts
-const { decision } = await chrome.runtime.sendMessage({
-  type: 'standdown:shouldStandDown',
-  tabId,
-  url,
-});
-if (decision.standDown) return; // do NOT activate: no redirect, cookie, or rewrite
-```
-
-**Content** (Safari / page-level):
-
-```ts
-import { allPolicies } from 'standdown/policies';
-import { createContentStanddown } from 'standdown/content';
-
-const standdown = createContentStanddown({
-  policies: allPolicies,
-  storage: 'session', // or 'local-ttl' (sliding 24h)
-  publisherSites: ['your-site.com'],
-});
-
-const decision = await standdown.ready;
-const suppress = decision.standDown || decision.degraded; // content is partial-coverage → fail closed
-if (suppress) return;
-```
-
-**Wire it into the real activation site** found in Phase 0: every path that fires
-affiliate attribution must first check the decision and bail when standing down.
-
-## Phase 4 — Build / bundle
-
-Chrome does not resolve npm subpath imports (`standdown/webext`) from service
-workers or popups — **you must bundle**. Follow the exact esbuild recipe in
-`examples/mv3-extension/README.md` (bundle each entry `--format=esm
---platform=browser`), adapted to the extension's own build. Then produce the
-unpacked output the grader will load.
-
-## Phase 5 — Grade conformance
-
-The grader is **not in the npm package** — it lives in the standdown repo's
-`audit/` harness. Clone the repo if needed and run it against the built,
-**unpacked** extension:
-
-```sh
-git clone https://github.com/dupe-com/standdown   # if not already available
-cd standdown/audit && npm install
-npx tsx grade/grade.ts /path/to/the/unpacked-extension
-```
-
-Read the letter grade (F→A+):
-
-- **A / A+** — respects existing attribution on every network *and* activates on
-  the positive controls. This is the target.
-- **C (inert)** — the inert cap fired: the extension never activated even when
-  allowed, so stand-down can't be distinguished from dead code. Your integration
-  is over-suppressing or the extension isn't actually doing anything on the
-  controls — check that activation still fires when there's no prior attribution.
-- **F** — it hijacked scenarios where attribution already existed. The
-  stand-down check isn't gating the real activation path; go back to Phase 3.
-
-If the run is inconclusive (the extension never triggers in the harness), note
-that — it is not the same as a fail.
-
-## Phase 6 — Report
-
-Summarize: adapter chosen, files changed (with the activation site now gated),
-build command, and the grade with its one-line rationale. If below A, name the
-specific scenario that failed and the fix.
-
-## Reference
-
-- `AGENTS.md` — the condensed integrator playbook (mirror of these phases).
-- `README.md` — full API: `selfPatterns` self-exemption scope, per-host disable
-  (`detection.disableHosts`), degraded decisions, signed policy refresh, interop.
-- `POLICIES.md` — bundled network packs and citations. `allPolicies` is the
-  verified set (cj, impact, rakuten, awin, shareasale, ebay-epn, amazon,
-  universal); `experimentalPolicies` (skimlinks, partnerize) are opt-in.
-- `examples/mv3-extension` — a working MV3 integration + the bundle recipe.
+- [`AGENTS.md`](../../../AGENTS.md) — the greenfield playbook (source of truth).
+- [`ADOPTING.md`](../../../ADOPTING.md) + [`adopt-standdown`](../../../skills/adopt-standdown/SKILL.md) — brownfield migration.
+- [`standdown-showcase`](../standdown-showcase/SKILL.md) — publish the A/A+ grade card to the showcase.
+- [`INSTALL.md`](../../../INSTALL.md) — manual walkthrough + full API.

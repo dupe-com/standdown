@@ -265,14 +265,16 @@ Do not remove the homegrown path on faith. Prove equivalence-or-better first.
 - [ ] **Shadow divergence report is clean.** Zero **dangerous-more-permissive**
   divergences on live traffic. Every remaining disagreement is classified
   safe-stricter or an approved human decision.
-- [ ] **Audit grade ≥ baseline.** Run the `audit/` grader (`npx tsx
-  grade/grade.ts /path/to/unpacked-extension`) against the built extension and
-  confirm the letter grade meets or beats the Phase-3 baseline. An **A / A+**
-  means it respects existing attribution on every tested network *and* still
-  activates when allowed. A **C (inert cap)** means it stopped activating at all —
-  over-suppression, which is safe for revenue but means you've shipped dead code;
-  investigate. An **F** means it hijacked attribution somewhere — the flag must
-  not go on.
+- [ ] **Audit grade ≥ baseline.** Run the deterministic `conformanceGrade`
+  (`cd standdown/audit && npm install && DISABLE_HOSTS="<hosts you disable>" npx
+  tsx grade/conformance.ts`) on your migrated policy set and confirm the letter
+  grade meets or beats the Phase-3 baseline — this is the number to report. An
+  **A / A+** means it respects existing attribution on every tested network *and*
+  still activates when allowed. A **C (inert cap)** means it stopped activating at
+  all — over-suppression, which is safe for revenue but means you've shipped dead
+  code; investigate. An **F** means it hijacked attribution somewhere — the flag
+  must not go on. (The in-browser `grade/grade.ts` is an optional extra sensor and
+  reads **C (inert)** on most real host extensions — don't use it for the grade.)
 - [ ] **No fail-open assertions.** Add tests asserting that malformed input,
   storage errors, and unknown networks resolve to `standDown: true` (or a
   suppressed activation), and that a `degraded` decision is treated as
@@ -293,6 +295,7 @@ Phase 3, step 5 and delete the homegrown logic.
   invariants (I1–I7).
 - `POLICIES.md` — bundled network packs and citations. `allPolicies` is the
   verified set; `experimentalPolicies` are opt-in.
-- `audit/README.md` — the conformance grader (the letter grade used in Phase 5).
-- The greenfield "install standdown" skill — for extensions with no existing
-  stand-down logic.
+- `audit/README.md` — the conformance graders (`conformanceGrade` is the letter
+  grade used in Phase 5).
+- `AGENTS.md` — the greenfield playbook, for extensions with **no** existing
+  stand-down logic (the `standdown` / `/standdown` skill drives it).
