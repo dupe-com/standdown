@@ -51,6 +51,11 @@
       "import": "./dist/content.mjs",
       "require": "./dist/content.cjs"
     },
+    "./url": {
+      "types": "./dist/url.d.ts",
+      "import": "./dist/url.mjs",
+      "require": "./dist/url.cjs"
+    },
     "./package.json": "./package.json"
   },
   "main": "./dist/index.cjs",
