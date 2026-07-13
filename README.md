@@ -71,21 +71,33 @@ follows the same playbook.
 > `degraded` gate; if you must use one, review the gating diff by hand and always
 > run the grader.
 
-**On Claude Code?** No checkout needed — install the skill into your personal
-skills, then just run `/standdown`:
+**On Claude Code?** Install the plugin once — no checkout — and get typed commands:
+
+```text
+/plugin marketplace add dupe-com/standdown
+/plugin install standdown@dupe
+```
+
+Then run **`/standdown:setup`** in your extension's repo (or **`/standdown:adopt`**
+for a [migration](./ADOPTING.md), **`/standdown:showcase`** to publish your grade).
+The plugin also auto-triggers when you just say *"add standdown to my extension."*
+
+<details>
+<summary>Prefer a single skill, without the plugin?</summary>
+
+Curl the skill straight into your personal skills — the slash command matches the
+folder you install it into:
 
 ```sh
 mkdir -p ~/.claude/skills/standdown && curl -fsSL \
-  https://raw.githubusercontent.com/dupe-com/standdown/main/.claude/skills/standdown/SKILL.md \
+  https://raw.githubusercontent.com/dupe-com/standdown/main/skills/setup/SKILL.md \
   -o ~/.claude/skills/standdown/SKILL.md
 ```
 
-Restart Claude Code (personal skills load at session start), then run
-**`/standdown`** in your extension's repo. The skill pulls the live
-[`AGENTS.md`](./AGENTS.md) playbook itself, so it stays current without
-reinstalling. Same one-liner for the other two skills — swap the path to
-`skills/adopt-standdown` for a [migration](./ADOPTING.md) (`/adopt-standdown`) or
-`.claude/skills/standdown-showcase` to publish your grade (`/standdown-showcase`).
+Restart Claude Code, then run `/standdown`. (Swap `skills/setup` for `skills/adopt`
+or `skills/showcase` to grab the others.) The skill pulls the live
+[`AGENTS.md`](./AGENTS.md) playbook itself, so it stays current.
+</details>
 
 **Wiring it by hand instead?** The full manual walkthrough and complete API
 reference — the five published surfaces, self-exemption, per-host disable, signed

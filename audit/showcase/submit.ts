@@ -1,6 +1,6 @@
 /**
  * Generate a showcase submission JSON from a fresh grade. This is what the
- * `standdown-showcase` skill / one-liner calls after integration: it grades the
+ * showcase skill (`/standdown:showcase`) / one-liner calls after integration: it grades the
  * declared inputs, stamps the SHA, and writes showcase/submissions/<slug>.json.
  * The caller then runs `build.ts` and opens a PR; CI re-verifies from scratch.
  *

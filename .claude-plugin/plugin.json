@@ -1,0 +1,12 @@
+{
+  "name": "standdown",
+  "description": "Install, migrate onto, and showcase the standdown affiliate stand-down library for browser extensions. Typed commands: /standdown:setup, /standdown:adopt, /standdown:showcase.",
+  "version": "0.1.0",
+  "homepage": "https://github.com/dupe-com/standdown",
+  "repository": "https://github.com/dupe-com/standdown",
+  "license": "MIT",
+  "author": {
+    "name": "Dupe",
+    "url": "https://dupe.com"
+  }
+}
