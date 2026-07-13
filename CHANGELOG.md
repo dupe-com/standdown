@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.2.4 - 2026-07-12
+
+Docs and audit-tooling release from the first real end-to-end integration
+(issue #22). **No library behavior change** — `src`/`dist` are unchanged since
+0.2.3; every change below is in guidance, examples, or the repo-only audit
+harness.
+
+### Added
+
+- `examples/content-extension` — a minimal `standdown/content` example: a content
+  script that gates an on-page offer on the decision and deliberately holds no
+  `webNavigation`/`webRequest` permissions (the case that forces `content` over
+  `webext`), with an esbuild IIFE bundle recipe.
+- Audit harness: `conformanceGrade` (`audit/grade/conformance.ts`) — a
+  decision-level, browser-free, CI-able grader that scores an adopter's policy set
+  against the fixture matrix via `StanddownSession.ingest`, including
+  adopter-declared disable hosts. Repo tooling; not part of the published package.
+- The audit harness now runs as its own vitest workspace and is gated in CI.
+
+### Changed
+
+- `AGENTS.md` Step 4: split degraded-handling guidance by adapter. Always-on
+  content-adapter extensions gate on `standDown` **alone** (the content plane
+  always reports `degraded: true` on a clean page, so `standDown || degraded`
+  there is permanently inert); redirect-plane tools keep `standDown || degraded`.
+- `README.md`: adapter selection is now keyed on **permissions** (`webext` needs
+  `webNavigation`/`webRequest`, otherwise `content`) with the `createStanddown()`
+  throw caveat; documented the global self-click exemption recipe; and the
+  copy-paste agent prompt now routes to the brownfield `ADOPTING.md` migration
+  when the extension already has stand-down logic.
+
+### Fixed
+
+- Audit grader `grade.ts` now notes that an INERT result on a real extension most
+  likely means its redirect sensor doesn't match how the extension activates (UI
+  paint / background tab), not that it's dead code.
+- Audit docs: build the root library first (the harness links `standdown` via
+  `file:..`, and `dist/` is not checked in).
+
 ## 0.2.3 - 2026-07-12
 
 ### Added
