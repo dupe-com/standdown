@@ -164,7 +164,7 @@ describe('policy packs', () => {
         }),
       ).not.toThrow();
       expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0][0]).toMatch(/ebay\.com/);
+      expect(warn.mock.calls[0]?.[0]).toMatch(/ebay\.com/);
 
       warn.mockClear();
 
