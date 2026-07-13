@@ -121,7 +121,12 @@ Integrate the `standdown` npm library into this browser extension so it stops
 hijacking affiliate attribution when a partner already owns the sale. Follow the
 official guide at https://raw.githubusercontent.com/dupe-com/standdown/main/AGENTS.md.
 
-Do the full loop:
+First check whether this extension ALREADY has its own affiliate stand-down /
+attribution-detection logic. If it does, STOP and use the brownfield migration
+prompt at https://raw.githubusercontent.com/dupe-com/standdown/main/ADOPTING.md
+instead — it moves the existing decision path onto the library in shadow mode,
+proving parity before cutover so no live commission is put at risk. Only if this
+is a greenfield install (no existing stand-down logic), do the full loop:
 1. `npm install standdown`.
 2. Pick the adapter by permissions: `standdown/webext` if the extension holds
    `webNavigation`/`webRequest`, otherwise `standdown/content` (Safari,
