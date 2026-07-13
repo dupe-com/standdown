@@ -6,6 +6,9 @@
   "description": "Eval harness and F→A+ grading for browser-extension affiliate stand-down (standdown).",
   "scripts": {
     "test": "vitest run",
+    "showcase:submit": "tsx showcase/submit.ts",
+    "showcase:build": "tsx showcase/build.ts",
+    "showcase:verify": "tsx showcase/verify.ts",
     "fixtures:serve": "tsx fixtures/server.ts",
     "fixtures:selftest": "tsx fixtures/selftest.ts",
     "spike:mv3": "tsx spike/mv3-spike.ts"
