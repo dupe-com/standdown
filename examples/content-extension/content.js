@@ -5,7 +5,7 @@ import { createContentStanddown } from 'standdown/content';
 // (location.href, document.referrer, first-party cookie NAMES). It needs no
 // webNavigation/webRequest permissions — which is exactly why an MV3 extension
 // that can't hold those permissions uses standdown/content instead of webext.
-createContentStanddown({
+const standdown = createContentStanddown({
   policies: allPolicies,
   storage: 'session', // or 'local-ttl' for a sliding 24h envelope
   // Declare your own site + click IDs so the library never stands you down
@@ -13,11 +13,29 @@ createContentStanddown({
   // publisherSites: ['your-site.com'],
   // selfPatterns: [{ name: 'your_click_id', networkId: 'cj' }],
 
-  // onDecision fires on the initial evaluation AND on every SPA navigation
-  // (the adapter hooks pushState/replaceState/popstate), so the gate below
-  // stays current without any extra wiring.
+  // onDecision fires on the initial evaluation and whenever the adapter's own
+  // history hooks (pushState/replaceState/popstate) fire.
+  //
+  // ISOLATED-WORLD CAVEAT: those hooks patch `history` in the world this script
+  // runs in. In a real content script that is the *isolated* world, so a SPA
+  // that calls `history.pushState` from its own (main-world) code will NOT
+  // trigger re-evaluation. Only `popstate` reliably crosses worlds. If your
+  // target sites are single-page apps, drive re-evaluation yourself from a
+  // navigation detector — see below.
   onDecision: applyDecision,
 });
+
+// Recommended for SPAs: re-evaluate on client-side route changes that the
+// adapter's isolated-world history hooks cannot see. Wire this to whatever
+// navigation signal you already have; a URL poll is the lowest-common-denominator
+// version. `evaluate()` recomputes from current page signals and fires onDecision.
+let lastUrl = location.href;
+setInterval(() => {
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    void standdown.evaluate();
+  }
+}, 1000);
 
 // Gate your on-page affiliate action on the decision. Fail closed: only act when
 // NOT standing down. The content plane can't observe redirect chains, so a clean

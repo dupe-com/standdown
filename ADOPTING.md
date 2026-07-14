@@ -161,6 +161,18 @@ Notes that generalize to any migration:
   the `disableHosts` entry until the business decides to reinstate it. Broader
   bundled packs (`universal`, `awin`, `shareasale`) are safe-stricter but will
   disagree with current behavior a lot — keep them **opt-in** for the first cut.
+- **The content adapter's history hooks do not see main-world SPA navigations.**
+  `createContentStanddown` patches `history.pushState`/`replaceState` and listens
+  for `popstate`, but a content script runs in an **isolated world**. Patching
+  `history.pushState` there only catches calls from the isolated world; when the
+  merchant's own SPA code changes the route it does so in the **main world**,
+  which the patch never sees. Only `popstate` crosses worlds. So on single-page-app
+  sites the auto hooks alone will miss most client-side route changes. Capture the
+  returned controller and drive `controller.evaluate()` from whatever navigation
+  signal you already have (your existing route/navigation detector, a
+  `MutationObserver`, or a URL poll). `evaluate()` recomputes from current page
+  signals and fires `onDecision`, so your shadow key / gate stays current. See
+  `examples/content-extension/` for the wiring.
 
 ---
 
