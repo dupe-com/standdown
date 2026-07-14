@@ -14,6 +14,24 @@ describe('conformanceGrade', () => {
     expect(result.letter).toMatch(/^A/);
   });
 
+  it('stands down on a bare Rakuten ranEAID (the hijack gap) and grades it as a control', async () => {
+    // A ranEAID-only landing is a real Rakuten click; the grader now exercises
+    // it as a positive control derived from the policy's narrower anyOf group.
+    const { result, observations } = await conformanceGrade({
+      policies: allPolicies,
+    });
+    const bareRanEaid = observations.find(({ scenario }) =>
+      scenario.id.startsWith('rakuten:attribution:landing-group:ranEAID'),
+    );
+
+    expect(bareRanEaid).toBeDefined();
+    expect(bareRanEaid?.expectedIntroduce).toBe(false); // expects stand-down
+    expect(bareRanEaid?.introducedAttribution).toBe(false); // actually stood down
+    expect(bareRanEaid?.passed).toBe(true);
+    expect(result.hijacks).toHaveLength(0);
+    expect(result.letter).toMatch(/^A/);
+  });
+
   it('grades adopter-declared disable hosts as stand-down scenarios', async () => {
     const { observations } = await conformanceGrade({
       policies: allPolicies,

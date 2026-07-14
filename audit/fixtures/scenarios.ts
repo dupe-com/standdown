@@ -49,6 +49,45 @@ export function buildScenarios(
   return policies.flatMap((policy) => scenariosForPolicy(policy));
 }
 
+/**
+ * In-process positive controls for every landing-param group a policy declares
+ * *beyond the first*. {@link buildScenarios} emits only one served landing-param
+ * scenario per network — the fixture server can serve a single representative
+ * group — so a policy's narrower `anyOf` groups (e.g. Rakuten's bare `ranEAID`)
+ * would otherwise never be graded, letting a group silently stop standing down.
+ * These are grade-only signals with no served/browser path: they feed straight
+ * into ingest() via the in-process conformance grader.
+ */
+export function landingGroupControls(
+  policies: readonly StanddownPolicy[] = allPolicies,
+): Scenario[] {
+  const out: Scenario[] = [];
+  for (const policy of policies) {
+    const net = policy.network.id;
+    const host = merchantHostFor(policy);
+    const path = merchantLandingPathFor(policy);
+    const { primary } = landingGroups(policy);
+    // Index 0 is already covered by the served landing-param scenario above.
+    for (let i = 1; i < primary.length; i++) {
+      const group = primary[i];
+      out.push({
+        id: `${net}:attribution:landing-group:${nameList(group)}`,
+        networkId: net,
+        kind: 'attribution',
+        mechanism: 'landing-param',
+        description: `${policy.network.name} attribution via landing param(s) ${nameList(group)}`,
+        signals: {
+          url: `https://${host}${path}${queryString(group)}`,
+          now: FIXED_NOW,
+        },
+        landingPath: withParams(`/merchant/${net}`, group),
+        expectStandDown: true,
+      });
+    }
+  }
+  return out;
+}
+
 function scenariosForPolicy(policy: StanddownPolicy): Scenario[] {
   const net = policy.network.id;
   const host = merchantHostFor(policy);

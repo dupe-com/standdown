@@ -183,6 +183,8 @@ describe('detect', () => {
       ).matched,
     ).toHaveLength(1);
 
+    // A bare ranEAID is a standalone Rakuten click id — it must match on its
+    // own so an overwrite can't hijack a ranEAID-only landing.
     expect(
       detect(
         {
@@ -191,7 +193,7 @@ describe('detect', () => {
         },
         [rakutenPolicy],
       ).matched,
-    ).toHaveLength(0);
+    ).toHaveLength(1);
 
     expect(
       detect(

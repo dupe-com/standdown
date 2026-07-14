@@ -7,6 +7,7 @@ import {
 import {
   buildScenarios,
   FIXED_NOW,
+  landingGroupControls,
   type Scenario,
 } from '../fixtures/scenarios.ts';
 import {
@@ -39,6 +40,10 @@ export async function conformanceGrade(
   const disableHosts = (input.disableHosts ?? []).map((h) => h.toLowerCase());
   const scenarios = [
     ...buildScenarios(input.policies),
+    // Positive controls for each policy's narrower landing-param groups, so a
+    // group that quietly stops standing down (e.g. a bare Rakuten ranEAID) is
+    // caught as a MISS instead of passing on the first group alone.
+    ...landingGroupControls(input.policies),
     ...disableHostScenarios(disableHosts),
     ...(input.extraScenarios ?? []),
   ].map((scenario) => reclassifyForDisableHosts(scenario, disableHosts));
