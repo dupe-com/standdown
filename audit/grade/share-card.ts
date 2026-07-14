@@ -165,4 +165,14 @@ export function emitShareCard(result: GradeResult, opts: EmitOptions = {}): void
   }
 
   console.log(`\n  Share it:\n  ${renderSocialSnippet(result)}\n`);
+
+  // Disambiguate the grade letter from the showcase badge tier — they both top
+  // out at "A+" but mean different things, which reliably confuses first-timers.
+  console.log(
+    `  Note: this letter is your policy config's conformance grade (computed\n` +
+      `  locally). The public "Graded with standdown" showcase badge is a separate\n` +
+      `  tier — a config-verified submission publishes as an A badge (your\n` +
+      `  ${result.score}/100 shown alongside); the A+ badge requires Tier 2 live-verify\n` +
+      `  of your published extension. See showcase/README.md.\n`,
+  );
 }
