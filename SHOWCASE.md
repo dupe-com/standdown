@@ -21,4 +21,11 @@ prompt, one PR).
 
 ---
 
-_No submissions yet — be the first: see [showcase/README.md](./showcase/README.md)._
+### [Dupe.com: Find similar products for less](https://dupe.com) — A
+
+<img src="showcase/cards/dupe.svg" alt="standdown A badge for Dupe.com: Find similar products for less" width="520">
+
+✅ **Reproduced by standdown CI** · **Tier 1 · config-verified** · conformance A+ (100/100) · inputs `sha256:1ccc48f554b3` · custom · submitted by i8ramin · 2026-07-13 · [Chrome Web Store](https://chrome.google.com/webstore/detail/pkhpcfoaocmmpmphhenoblggeinedlah)
+
+> ⬆️ **Upgrade to A+:** verify this on the live published extension — see [showcase/README.md](./showcase/README.md#reach-a-tier-2).
+
