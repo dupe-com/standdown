@@ -324,6 +324,48 @@ Phase 3, step 5 and delete the homegrown logic.
 
 ---
 
+## Phase 6 — Showcase your grade (optional)
+
+Once you have a passing `conformanceGrade`, you can publish it to the public
+["Graded with standdown" wall of fame](./showcase/README.md) — a CI-verified
+gallery where the grade is reproduced from your declared inputs, so it can't be
+faked. Run [`/standdown:showcase`](./showcase/README.md#add-yours--one-prompt) (or
+follow the by-hand steps) to open a PR to `dupe-com/standdown`.
+
+**Read this before you submit — the badge is not your grade letter.** The
+showcase badge reflects a **verification tier**, not the raw score, and the two
+scales collide at "A+":
+
+- **Tier 1 (config-verified) caps the badge at A.** CI re-runs the grade on your
+  declared policy inputs and reproduces it. Your true conformance score (e.g.
+  `A+ 100/100`) is shown *alongside* the A badge — an A badge with a 100/100 score
+  just means "proven config, not yet proven on prod."
+- **Tier 2 (live-verified) earns the A+ badge.** CI additionally downloads your
+  **published** Chrome Web Store crx and confirms it bundles this exact policy set
+  (matching inputs SHA).
+
+**For a brownfield adopter this ordering is structural, not optional.** Until you
+have completed the flagged cutover (Phase 3, step 4) *and shipped a Web Store
+build that carries this config*, your deployed extension does **not** bundle the
+migrated policy set — the flag is off by default. So:
+
+- **Submitting during shadow / off-by-default → Tier 1 (A).** This is honest and
+  reproducible; a `live-verify` right now would correctly *fail* the SHA match
+  because prod doesn't ship this config yet. Don't try to force A+ before cutover.
+- **Upgrading to A+ is a deliberate post-cutover step.** After the flag has soaked
+  at 100% and the new Web Store build is live, run `showcase:live-verify` against
+  the deployed crx, rebuild the card, and the badge flips A → A+ on the same
+  showcase entry (see [Reach A+ (Tier 2)](./showcase/README.md#reach-a-tier-2)).
+  A weekly cron re-checks merged records, so if you later ship a divergent version
+  the A+ is revisited.
+
+The zero-effort alternative to a public submission is the shareable SVG card the
+grader already emits on every passing run — drop it in your PR or internal docs.
+It shows the full-strength conformance grade (A+) without any tier gating, because
+it isn't making a verification claim about prod.
+
+---
+
 ## Reference
 
 - `README.md` — full API: `selfPatterns` / `selfExemptionScope`,

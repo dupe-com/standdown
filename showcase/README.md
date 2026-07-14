@@ -90,6 +90,13 @@ Store (no API key) and re-derives the inputs SHA from it. A+ is granted only whe
 that SHA equals your submission's. Prerequisite: `extension.chromeWebStoreId` set,
 and the graded config live on prod.
 
+> **Brownfield adopters:** "live on prod" means *after* your cutover ships. If you
+> migrated onto standdown via [`ADOPTING.md`](../ADOPTING.md), the library runs
+> off-by-default until you flip the cutover flag and publish a Web Store build that
+> bundles this config. Until then a `live-verify` correctly fails the SHA match —
+> submit at Tier 1 (A) now and upgrade to A+ here once the cutover is live (see
+> [Phase 6](../ADOPTING.md#phase-6--showcase-your-grade-optional)).
+
 There are two ways CI can recover your shipped policy set from the crx:
 
 **1. The `standdown.manifest.json` convention (recommended).** Have your build
