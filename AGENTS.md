@@ -184,6 +184,16 @@ DISABLE_HOSTS="ebay.com,homedepot.com" npx tsx grade/conformance.ts
 #   standdown conformance grade: A+  (100/100)
 ```
 
+The bare command grades standdown's bundled `allPolicies`. **If your extension
+ships a custom or subset policy set** (anything other than `allPolicies`
+verbatim), point `POLICY_PACK` at the module you actually bundle so the grade
+reflects what you ship — otherwise you're grading the wrong policies:
+
+```sh
+POLICY_PACK=/abs/path/to/your/policies.ts \
+  DISABLE_HOSTS="ebay.com,homedepot.com" npx tsx grade/conformance.ts
+```
+
 Target **A/A+**. The rubric has an **inert cap**: a policy set that never allows
 activation on any positive control can't score above a C, so "disciplined
 stand-down" can't be faked by suppressing everything.

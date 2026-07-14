@@ -203,6 +203,10 @@ down instead of hijacking existing attribution. Two graders:
   #   standdown conformance grade: A+  (100/100)
   ```
 
+  The bare command grades the bundled `allPolicies`; if you ship a custom or
+  subset set, add `POLICY_PACK=/abs/path/to/your/policies.ts` so it grades what
+  you actually bundle.
+
 - **`grade.ts` (in-browser)** — loads an unpacked extension into a real browser
   and watches for the testexts' `/aff/:net?actor=` redirect. A real host
   extension that activates by painting UI usually scores **C (inert)** here —
