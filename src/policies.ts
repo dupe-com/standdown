@@ -148,6 +148,11 @@ export const rakutenPolicy = {
             allOf: [{ name: 'ranMID' }, { name: 'ranEAID' }, { name: 'ranSiteID' }],
           },
           { allOf: [{ name: 'ranEAID' }, { name: 'ranSiteID' }] },
+          // A bare ranEAID (Encrypted Affiliate ID) is enough to identify a
+          // Rakuten click: a landing carrying only ranEAID still belongs to the
+          // partner, so failing to stand down here lets an overwrite hijack it.
+          // Matches the Rakuten PublisherStandown-SDK's own detection.
+          { allOf: [{ name: 'ranEAID' }] },
           { allOf: [{ name: 'ranSiteID' }] },
           { allOf: [{ name: 'siteID' }] },
         ],
