@@ -12,6 +12,7 @@ import type {
   StanddownPolicy,
   StateStore,
 } from './types';
+import { lintPolicies } from './validation';
 
 export {
   LocalStorageTtlStateStore,
@@ -92,6 +93,14 @@ export interface ContentHistoryLike {
 export function createContentStanddown(
   opts: CreateContentStanddownOptions,
 ): ContentStanddownController {
+  // Surface config footguns (e.g. a bare-label `suffix` disableHost that matches
+  // no real host) once, at wiring time — not buried in per-navigation console
+  // noise. Advisory only; never throws. Malformed policies still fail closed at
+  // ingest (see StanddownSession.ingest).
+  for (const warning of lintPolicies(opts.policies)) {
+    console.warn(warning);
+  }
+
   const windowLike = opts.window ?? currentWindow();
   const now = opts.now ?? Date.now;
   const store = opts.store ?? createContentStore(windowLike, opts, now);

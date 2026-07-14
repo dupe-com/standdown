@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { guardActivation, validatePolicy } from '../src';
+import { guardActivation, lintPolicies, validatePolicy } from '../src';
 import { allPolicies, amazonPolicy, cjPolicy, ebayEpnPolicy, policiesFor } from '../src/policies';
 
 const trustedClick = {
@@ -177,5 +177,58 @@ describe('policy packs', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe('lintPolicies', () => {
+  it('returns no warnings for the bundled verified set', () => {
+    expect(lintPolicies(allPolicies)).toEqual([]);
+  });
+
+  it('flags a bare-label suffix disableHost (the substring mis-port)', () => {
+    const warnings = lintPolicies([
+      {
+        ...cjPolicy,
+        detection: { disableHosts: [{ pattern: 'ebay.', kind: 'suffix' }] },
+      },
+    ]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/bare/);
+    expect(warnings[0]).toMatch(/"ebay\."/);
+  });
+
+  it('does not flag a proper registrable-domain suffix', () => {
+    expect(
+      lintPolicies([
+        {
+          ...cjPolicy,
+          detection: { disableHosts: [{ pattern: 'ebay.com', kind: 'suffix' }] },
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('does not flag a regex rule (only suffix rules are label-checked)', () => {
+    expect(
+      lintPolicies([
+        {
+          ...cjPolicy,
+          detection: { disableHosts: [{ pattern: '(^|\\.)ebay\\.[a-z.]+$', kind: 'regex' }] },
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('scans redirectDomains and advertiserHosts too, and never throws', () => {
+    const warnings = lintPolicies([
+      {
+        ...cjPolicy,
+        detection: {
+          redirectDomains: [{ pattern: 'linksynergy', kind: 'suffix' }],
+          advertiserHosts: [{ pattern: 'shop.', kind: 'suffix' }],
+        },
+      },
+    ]);
+    expect(warnings).toHaveLength(2);
   });
 });

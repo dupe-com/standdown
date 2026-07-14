@@ -121,6 +121,74 @@ export function validatePolicies(
   values.forEach(validatePolicy);
 }
 
+/**
+ * Non-throwing advisory lint over an already-typed policy set. Returns
+ * human-readable warnings for structurally-valid but almost-certainly-wrong
+ * configuration — today, bare-label `suffix` DomainRules (the substring mis-port
+ * that silently makes a host block inert; see {@link validatePolicy}). Unlike
+ * {@link validatePolicies} it never throws, so adapters can run it at
+ * construction and surface the warning **once, immediately** rather than leaving
+ * it buried in per-navigation console noise. Returns `[]` for a clean set.
+ */
+export function lintPolicies(policies: readonly StanddownPolicy[]): string[] {
+  const warnings: string[] = [];
+
+  for (const policy of policies ?? []) {
+    const detection = policy?.detection;
+    if (!detection) {
+      continue;
+    }
+
+    const domainRules = [
+      ...(detection.disableHosts ?? []),
+      ...(detection.redirectDomains ?? []),
+      ...(detection.advertiserHosts ?? []),
+    ];
+
+    for (const rule of domainRules) {
+      const warning = bareLabelSuffixWarning(rule);
+      if (warning) {
+        warnings.push(warning);
+      }
+    }
+  }
+
+  return warnings;
+}
+
+/**
+ * Detect a `suffix` DomainRule whose pattern is a bare label (`ebay`, `ebay.`)
+ * and therefore matches no real host. Returns the warning string, or `null` when
+ * the rule is not a suffix, not a string pattern, or a proper registrable
+ * domain. Shared by {@link validatePolicy} (validation-time) and
+ * {@link lintPolicies} (construction-time) so the two never drift.
+ */
+function bareLabelSuffixWarning(rule: {
+  kind?: unknown;
+  pattern?: unknown;
+}): string | null {
+  if (rule.kind !== 'suffix' || typeof rule.pattern !== 'string') {
+    return null;
+  }
+
+  const normalized = rule.pattern
+    .toLowerCase()
+    .replace(/^\.+/, '')
+    .replace(/\.+$/, '');
+
+  if (normalized.length > 0 && normalized.includes('.')) {
+    return null;
+  }
+
+  const example = normalized || 'example';
+  return (
+    `standdown: DomainRule suffix pattern ${JSON.stringify(rule.pattern)} is a bare ` +
+    `label — suffix rules match registrable domains, so it will not match hosts ` +
+    `like "${example}.com". Did you port a substring rule? Use a full host ` +
+    `(e.g. "${example}.com") or kind: "regex".`
+  );
+}
+
 function validateParamRule(ruleValue: unknown): void {
   const rule = object(ruleValue, 'ParamRule');
   const anyOf = array(rule.anyOf, 'ParamRule.anyOf');
@@ -184,18 +252,9 @@ function validateDomainRule(ruleValue: unknown): void {
     // the classic mis-port of a substring domain list (`hostname.includes('ebay.')`)
     // onto suffix rules, which silently makes the rule inert. Warn, don't throw:
     // the rule is structurally valid, just almost certainly a mistake.
-    const normalized = rule.pattern
-      .toLowerCase()
-      .replace(/^\.+/, '')
-      .replace(/\.+$/, '');
-    if (normalized.length === 0 || !normalized.includes('.')) {
-      const example = normalized || 'example';
-      console.warn(
-        `standdown: DomainRule suffix pattern ${JSON.stringify(rule.pattern)} is a bare ` +
-          `label — suffix rules match registrable domains, so it will not match hosts ` +
-          `like "${example}.com". Did you port a substring rule? Use a full host ` +
-          `(e.g. "${example}.com") or kind: "regex".`,
-      );
+    const warning = bareLabelSuffixWarning(rule);
+    if (warning) {
+      console.warn(warning);
     }
   }
 

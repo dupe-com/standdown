@@ -16,6 +16,7 @@ import type {
   StanddownState,
   StateStore,
 } from './types';
+import { lintPolicies } from './validation';
 
 export {
   ChromeLocalStateStore,
@@ -167,6 +168,14 @@ type RuntimeMessageListener = (
 export function createStanddown(
   opts: CreateStanddownOptions,
 ): StanddownWebextController {
+  // Surface config footguns (e.g. a bare-label `suffix` disableHost that matches
+  // no real host) once, at wiring time — not buried in per-navigation console
+  // noise. Advisory only; never throws. Malformed policies still fail closed at
+  // ingest (see StanddownSession.ingest).
+  for (const warning of lintPolicies(opts.policies)) {
+    console.warn(warning);
+  }
+
   const chromeApi = opts.chrome ?? currentChrome();
   const now = opts.now ?? Date.now;
   const fetchImpl = opts.fetch ?? currentFetch();

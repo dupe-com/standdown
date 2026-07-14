@@ -38,4 +38,4 @@ export type {
   StateStore,
   UserGesture,
 } from './types';
-export { validatePolicies, validatePolicy } from './validation';
+export { lintPolicies, validatePolicies, validatePolicy } from './validation';
