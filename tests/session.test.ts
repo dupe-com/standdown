@@ -415,6 +415,33 @@ describe('StanddownSession', () => {
     expect(decision.standDown).toBe(true);
     expect(decision.degraded).toBeUndefined();
   });
+
+  it('serializes concurrent ingests so neither loses the other write', async () => {
+    // A store that yields on every load/save, forcing two overlapping
+    // evaluations to interleave. Without the session's serialization both would
+    // load the same pre-write snapshot and the second save would clobber the
+    // first, dropping one host's stand-down record.
+    const store = new DelayingStore();
+    const session = new StanddownSession(store);
+
+    const [a, b] = await Promise.all([
+      session.ingest(
+        { url: 'https://merchant-a.example/?cjevent=aaa', now: 0 },
+        [cjPolicy],
+      ),
+      session.ingest(
+        { url: 'https://merchant-b.example/?cjevent=bbb', now: 0 },
+        [cjPolicy],
+      ),
+    ]);
+
+    expect(a).toMatchObject({ standDown: true, policyId: 'cj' });
+    expect(b).toMatchObject({ standDown: true, policyId: 'cj' });
+
+    const state = await store.load();
+    expect(state?.sessions['merchant-a.example']).toBeDefined();
+    expect(state?.sessions['merchant-b.example']).toBeDefined();
+  });
 });
 
 class FailingLoadStore implements StateStore {
@@ -434,6 +461,24 @@ class FailingSaveStore implements StateStore {
 
   async save(_state: StanddownState): Promise<void> {
     throw new Error('save failed');
+  }
+}
+
+class DelayingStore implements StateStore {
+  readonly #inner: MemoryStateStore;
+
+  constructor(initialState?: StanddownState) {
+    this.#inner = new MemoryStateStore(initialState);
+  }
+
+  async load(): Promise<StanddownState | undefined> {
+    await Promise.resolve();
+    return this.#inner.load();
+  }
+
+  async save(state: StanddownState): Promise<void> {
+    await Promise.resolve();
+    return this.#inner.save(state);
   }
 }
 
