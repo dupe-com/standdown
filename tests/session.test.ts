@@ -349,28 +349,27 @@ describe('StanddownSession', () => {
       ),
     ).resolves.toMatchObject({ standDown: false });
 
-    // A competitor's CJ click on the same host, inside the 30-minute window:
-    // the exemption still suppresses it (the documented within-window behavior
-    // that item 3's Option C narrows separately).
+    // The lingering CJ cookie (an ambient signal, re-attributed to us) inside the
+    // 30-minute window: the live exemption still suppresses it.
     await expect(
       session.ingest(
         {
-          url: 'https://merchant.example/?cjevent=rival',
+          url: 'https://merchant.example/checkout',
           now: 60_000,
-          selfPatterns,
+          cookieNames: ['cjevent_dc'],
         },
         [cjPolicy],
       ),
     ).resolves.toMatchObject({ standDown: false });
 
-    // Past the TTL the exemption has lapsed, so the same competitor click now
-    // stands down.
+    // Past the TTL the exemption has lapsed, so the same lingering cookie now
+    // drives a stand-down.
     await expect(
       session.ingest(
         {
-          url: 'https://merchant.example/?cjevent=rival',
+          url: 'https://merchant.example/checkout',
           now: 1_800_001,
-          selfPatterns,
+          cookieNames: ['cjevent_dc'],
         },
         [cjPolicy],
       ),
@@ -391,13 +390,14 @@ describe('StanddownSession', () => {
       [cjPolicy],
     );
 
-    // Well past any default window, the exemption still applies.
+    // Well past any default window, the exemption still re-attributes the
+    // lingering cookie to us.
     await expect(
       session.ingest(
         {
-          url: 'https://merchant.example/?cjevent=rival',
+          url: 'https://merchant.example/checkout',
           now: 10 * 60 * 60 * 1_000,
-          selfPatterns,
+          cookieNames: ['cjevent_dc'],
         },
         [cjPolicy],
       ),
