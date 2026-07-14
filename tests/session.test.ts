@@ -333,6 +333,77 @@ describe('StanddownSession', () => {
     });
   });
 
+  it('bounds a session self-exemption by the default TTL', async () => {
+    const selfPatterns = [
+      { name: 'cjevent', value: 'own', match: 'equals' as const, policyId: 'cj' },
+    ];
+    const session = new StanddownSession(new MemoryStateStore(), {
+      selfExemptionScope: 'session',
+    });
+
+    // Our own click: self-exempted, and it records the host exemption.
+    await expect(
+      session.ingest(
+        { url: 'https://merchant.example/?cjevent=own', now: 0, selfPatterns },
+        [cjPolicy],
+      ),
+    ).resolves.toMatchObject({ standDown: false });
+
+    // A competitor's CJ click on the same host, inside the 30-minute window:
+    // the exemption still suppresses it (the documented within-window behavior
+    // that item 3's Option C narrows separately).
+    await expect(
+      session.ingest(
+        {
+          url: 'https://merchant.example/?cjevent=rival',
+          now: 60_000,
+          selfPatterns,
+        },
+        [cjPolicy],
+      ),
+    ).resolves.toMatchObject({ standDown: false });
+
+    // Past the TTL the exemption has lapsed, so the same competitor click now
+    // stands down.
+    await expect(
+      session.ingest(
+        {
+          url: 'https://merchant.example/?cjevent=rival',
+          now: 1_800_001,
+          selfPatterns,
+        },
+        [cjPolicy],
+      ),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+  });
+
+  it('holds a session self-exemption for the state lifetime when TTL is disabled', async () => {
+    const selfPatterns = [
+      { name: 'cjevent', value: 'own', match: 'equals' as const, policyId: 'cj' },
+    ];
+    const session = new StanddownSession(new MemoryStateStore(), {
+      selfExemptionScope: 'session',
+      sessionExemptionTtlMs: 0,
+    });
+
+    await session.ingest(
+      { url: 'https://merchant.example/?cjevent=own', now: 0, selfPatterns },
+      [cjPolicy],
+    );
+
+    // Well past any default window, the exemption still applies.
+    await expect(
+      session.ingest(
+        {
+          url: 'https://merchant.example/?cjevent=rival',
+          now: 10 * 60 * 60 * 1_000,
+          selfPatterns,
+        },
+        [cjPolicy],
+      ),
+    ).resolves.toMatchObject({ standDown: false });
+  });
+
   it('validates the test policy fixture', () => {
     expect(() =>
       validatePolicy(

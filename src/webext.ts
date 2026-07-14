@@ -61,6 +61,12 @@ export interface CreateStanddownOptions {
    * navigations (Dupe's `ignore_param` semantics).
    */
   readonly selfExemptionScope?: 'policy' | 'session';
+  /**
+   * TTL for a `selfExemptionScope: 'session'` exemption, measured from when it
+   * was first granted. Defaults to 30 minutes; `0` or any non-positive value
+   * disables expiry (lifetime of the session state).
+   */
+  readonly sessionExemptionTtlMs?: number;
 }
 
 export interface StanddownWebextController {
@@ -452,11 +458,16 @@ export function createStanddown(
 function sessionOptions(
   opts: CreateStanddownOptions,
 ):
-  | { auditLog?: boolean; selfExemptionScope?: 'policy' | 'session' }
+  | {
+      auditLog?: boolean;
+      selfExemptionScope?: 'policy' | 'session';
+      sessionExemptionTtlMs?: number;
+    }
   | undefined {
   const sessionOpts: {
     auditLog?: boolean;
     selfExemptionScope?: 'policy' | 'session';
+    sessionExemptionTtlMs?: number;
   } = {};
 
   if (opts.auditLog !== undefined) {
@@ -465,6 +476,10 @@ function sessionOptions(
 
   if (opts.selfExemptionScope !== undefined) {
     sessionOpts.selfExemptionScope = opts.selfExemptionScope;
+  }
+
+  if (opts.sessionExemptionTtlMs !== undefined) {
+    sessionOpts.sessionExemptionTtlMs = opts.sessionExemptionTtlMs;
   }
 
   return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;

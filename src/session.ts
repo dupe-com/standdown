@@ -33,6 +33,7 @@ export class StanddownSession {
   readonly #auditLog: boolean;
   readonly #maxAuditEntries: number;
   readonly #selfExemptionScope: 'policy' | 'session';
+  readonly #sessionExemptionTtlMs: number;
   readonly #readOnlyAuditLog: AuditEntry[] = [];
   #stateLock: Promise<unknown> = Promise.resolve();
 
@@ -50,12 +51,20 @@ export class StanddownSession {
        * lifts an already-active stand-down and never covers a `disabled-host`.
        */
       selfExemptionScope?: 'policy' | 'session';
+      /**
+       * How long a `selfExemptionScope: 'session'` exemption persists for a
+       * host, measured from when it was first granted (fixed, not sliding).
+       * Defaults to 30 minutes. Set to `0` or any non-positive value to disable
+       * expiry and hold the exemption for the lifetime of the session state.
+       */
+      sessionExemptionTtlMs?: number;
     },
   ) {
     this.#store = store;
     this.#auditLog = opts?.auditLog ?? true;
     this.#maxAuditEntries = Math.max(0, opts?.maxAuditEntries ?? 1_000);
     this.#selfExemptionScope = opts?.selfExemptionScope ?? 'policy';
+    this.#sessionExemptionTtlMs = opts?.sessionExemptionTtlMs ?? 1_800_000;
   }
 
   async ingest(
@@ -88,12 +97,18 @@ export class StanddownSession {
     }
 
     return this.#withState(signals.now, (state) => {
-      pruneExpiredSessions(state, signals.now);
+      pruneExpiredState(state, signals.now);
 
       let effective = detection;
 
       if (this.#selfExemptionScope === 'session' && advertiserHost) {
-        recordSessionExemptions(state, advertiserHost, detection, signals.now);
+        recordSessionExemptions(
+          state,
+          advertiserHost,
+          detection,
+          signals.now,
+          this.#sessionExemptionTtlMs,
+        );
         effective = applySessionExemptions(
           advertiserHost,
           detection,
@@ -164,7 +179,7 @@ export class StanddownSession {
     return this.#withState(
       now,
       (state) => {
-        pruneExpiredSessions(state, now);
+        pruneExpiredState(state, now);
 
         return {
           decision:
@@ -186,7 +201,7 @@ export class StanddownSession {
     await this.#withState(
       now,
       (state) => {
-        pruneExpiredSessions(state, now);
+        pruneExpiredState(state, now);
 
         for (const record of Object.values(state.sessions)) {
           if (record.sessionRule === 'inactivity-window') {
@@ -431,6 +446,7 @@ function recordSessionExemptions(
   advertiserHost: string,
   detection: Detection,
   now: number,
+  ttlMs: number,
 ): void {
   const scopes = detection.selfExemptScopes;
 
@@ -458,12 +474,19 @@ function recordSessionExemptions(
     networkIds.add(scope.networkId);
   }
 
-  exemptions[key] = {
+  const grantedAt = existing?.grantedAt ?? now;
+  const record: ExemptionRecord = {
     advertiserHost: key,
     policyIds: [...policyIds],
     networkIds: [...networkIds],
-    grantedAt: existing?.grantedAt ?? now,
+    grantedAt,
   };
+
+  if (ttlMs > 0) {
+    record.expiresAt = grantedAt + ttlMs;
+  }
+
+  exemptions[key] = record;
 }
 
 /**
@@ -615,10 +638,18 @@ function isActive(record: SessionRecord, now: number): boolean {
   return expiresAt === undefined ? false : now < expiresAt;
 }
 
-function pruneExpiredSessions(state: StanddownState, now: number): void {
+function pruneExpiredState(state: StanddownState, now: number): void {
   for (const [host, record] of Object.entries(state.sessions)) {
     if (!isActive(record, now)) {
       delete state.sessions[host];
+    }
+  }
+
+  if (state.exemptions) {
+    for (const [host, record] of Object.entries(state.exemptions)) {
+      if (record.expiresAt !== undefined && record.expiresAt <= now) {
+        delete state.exemptions[host];
+      }
     }
   }
 }
