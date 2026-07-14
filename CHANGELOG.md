@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.3 - 2026-07-14
+
+Hardening for `selfExemptionScope: 'session'`, closing the last item of the
+content-controller review. **Touches `src`**; one additive option and one
+narrowing of what a live exemption suppresses.
+
+### Added
+
+- `sessionExemptionTtlMs` on the session (and the `content` / `webext` / `url`
+  adapters): how long a session self-exemption persists for a host, measured
+  from when it was first granted. Defaults to **30 minutes** (fixed, not
+  sliding). Set to `0` or any non-positive value to disable expiry and keep the
+  previous lifetime-of-session-state behavior. Session exemptions were never
+  pruned before, so a single self-click grant lasted the whole session; this
+  bounds that window.
+
+### Fixed
+
+- A session self-exemption no longer swallows a **competing attribution param**.
+  It previously dropped any later same-network match for an exempted host,
+  including a fresh `landing-param` / `redirect-domain` carrying someone else's
+  click id, so a competitor's click back to an already-exempted host was
+  suppressed and the sale taken. The exemption now re-covers only ambient
+  lingering signals (a first-party cookie, the initiator); a fresh competing
+  attribution param that is not our own self-match stands down. This bites only
+  with value-specific self-patterns (the documented, correct way to author
+  them); a name-only self-pattern already claims every value of that param as
+  ours (#56, #57, resolves the session-exemption item of #52).
+
 ## 0.3.2 - 2026-07-14
 
 Concurrency fix in decision persistence. **Touches `src`** — a correctness fix;
