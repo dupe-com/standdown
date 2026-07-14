@@ -492,8 +492,20 @@ function recordSessionExemptions(
 /**
  * Re-apply a host's persisted session exemptions: drop matched rules whose
  * policy/network was exempted for this host, then recompute the strongest match.
- * `disabled-host` matches are never dropped — a hard-disabled host stands down
- * regardless of any self-exemption.
+ *
+ * Two matches are never dropped, even when their scope is exempted:
+ * - `disabled-host` — a hard-disabled host stands down regardless of any
+ *   self-exemption.
+ * - a *fresh competing attribution param* (`landing-param` / `redirect-domain`)
+ *   that is not itself a self-match on this navigation. A persisted exemption
+ *   means "our attribution owns this host's session", which is meant to re-cover
+ *   ambient lingering signals (a first-party cookie, the initiator). It must not
+ *   swallow a later click that carries *someone else's* attribution id for the
+ *   same network, or a competitor could hijack an already-exempted host. This
+ *   only bites when self-patterns are value-specific (the documented, correct
+ *   way to author them); a name-only self-pattern already claims every value of
+ *   that param as ours, so a competing value looks like a self-match and is
+ *   suppressed — the same footgun the self-exemption docs already warn about.
  */
 function applySessionExemptions(
   advertiserHost: string,
@@ -508,6 +520,14 @@ function applySessionExemptions(
   const policyIds = new Set(record.policyIds);
   const networkIds = new Set(record.networkIds);
 
+  // Scopes for which THIS navigation carried our own (value-matched) attribution.
+  const selfPolicyIds = new Set(
+    detection.selfExemptScopes?.map((scope) => scope.policyId),
+  );
+  const selfNetworkIds = new Set(
+    detection.selfExemptScopes?.map((scope) => scope.networkId),
+  );
+
   const filtered = detection.matched.filter((match) => {
     if (match.kind === 'disabled-host') {
       return true;
@@ -517,7 +537,21 @@ function applySessionExemptions(
       return true;
     }
 
-    return !(policyIds.has(match.policyId) || networkIds.has(match.networkId));
+    if (!(policyIds.has(match.policyId) || networkIds.has(match.networkId))) {
+      return true;
+    }
+
+    const isAttributionParam =
+      match.kind === 'landing-param' || match.kind === 'redirect-domain';
+    const isSelfThisNavigation =
+      selfPolicyIds.has(match.policyId) || selfNetworkIds.has(match.networkId);
+
+    // Keep (do not suppress) a competing attribution param that isn't ours.
+    if (isAttributionParam && !isSelfThisNavigation) {
+      return true;
+    }
+
+    return false;
   });
 
   if (filtered.length === detection.matched.length) {
