@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Decision } from '../src';
 import {
   type ContentHistoryLike,
@@ -28,6 +28,47 @@ describe('content adapter', () => {
     ]);
     expect(JSON.stringify(signals)).not.toContain('secret');
     expect(JSON.stringify(signals)).not.toContain('hidden=value');
+  });
+
+  it('warns once at construction on a bare-label suffix disableHost', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const controller = createContentStanddown({
+        // `'ebay.'` is inert as a suffix rule — the substring mis-port footgun.
+        // The adapter should surface it at wiring time, not only per-navigation.
+        policies: [
+          {
+            ...cjPolicy,
+            detection: { disableHosts: [{ pattern: 'ebay.', kind: 'suffix' }] },
+          },
+        ],
+        window: new FakeContentWindow('https://merchant.example/product', ''),
+        now: () => 1_000,
+      });
+      // The construction lint runs synchronously, before any ingest — so the
+      // FIRST warn is the wiring-time surfacing we care about. (A later ingest's
+      // validatePolicies may warn again; that's pre-existing and harmless.)
+      expect(warn).toHaveBeenCalled();
+      expect(warn.mock.calls[0]?.[0]).toMatch(/bare/);
+      controller.dispose?.();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('does not warn at construction for a clean policy set', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const controller = createContentStanddown({
+        policies: [cjPolicy],
+        window: new FakeContentWindow('https://merchant.example/product', ''),
+        now: () => 1_000,
+      });
+      controller.dispose?.();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('reports partial signal coverage (no redirect-chain plane)', () => {
