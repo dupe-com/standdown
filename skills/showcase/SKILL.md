@@ -28,11 +28,22 @@ be faked.
    — if published — its Chrome Web Store id. Ask the user only for their **GitHub
    handle** and **today's date** (`YYYY-MM-DD`; the tooling has no clock).
 
-3. **Run the flow from `showcase/README.md`:** `showcase:submit` → `showcase:build`
+3. **Disclosure check — get explicit consent before publishing.** A submission is
+   a **public PR to a Dupe-owned repo**. Before generating or opening anything,
+   tell the user plainly what it discloses (see ["What gets published"](../../showcase/README.md#what-gets-published-and-what-doesnt)):
+   for a **`custom`** set, that's their resolved `policies` array + `disableHosts` —
+   a public, machine-readable map of which networks they honor and which merchants
+   they stand down on; for **`allPolicies`**, only "ships the standard verified
+   set." State what is **not** sent (no `selfPatterns`/self-click ids, no keys, no
+   user data, no source). Then ask whether to **proceed with the public PR**,
+   **submit as `allPolicies` to disclose less**, or **stop** (the local SVG card
+   makes no public claim). Do not proceed to step 4 without an explicit yes.
+
+4. **Run the flow from `showcase/README.md`:** `showcase:submit` → `showcase:build`
    → `showcase:verify` (the exact check CI runs — must pass), then open a PR to
    `dupe-com/standdown` with the generated files.
 
-4. **A+ (Tier 2), only if published:** run `showcase:live-verify` and include
+5. **A+ (Tier 2), only if published:** run `showcase:live-verify` and include
    `showcase/verifications/<slug>.json` in the PR. Details in the "Reach A+"
    section. Before publishing, `CRX_FILE=<built .zip> …:live-verify` dry-runs it.
 
@@ -46,6 +57,10 @@ be faked.
   the live-verified crx.
 - Submit only the user's **own** extension, and only a real passing grade — don't
   massage inputs to clear the bar. Keep the PR to the generated files.
+- **Publishing is an outward action** — never push the branch or open the PR
+  without the user's explicit go-ahead after the step-3 disclosure check. Present
+  the exact `git push` / PR-create command for them to run if the environment gates
+  outward actions.
 
 ## Related
 

@@ -42,6 +42,42 @@ CI-authoritative. You control only the inputs; the grade follows from them.
 
 Only genuinely passing runs are eligible: **A-band, zero hijacks, non-inert.**
 
+## What gets published (and what doesn't)
+
+A submission is a **public PR to this repo**. Before you open one, here's exactly
+what it discloses — and what it never touches.
+
+**Published** (in `showcase/submissions/<slug>.json`, all reproducible by CI):
+
+- Your extension's **name**, **URL**, and **Chrome Web Store id** — all already
+  public on your store listing.
+- Your GitHub handle (`submittedBy`), the grade, the inputs SHA, and the date.
+- Your **`policySet`** — and, *only if it is `custom`*, the resolved `policies`
+  array and the `disableHosts` you ship.
+
+**Never sent, by construction:**
+
+- ❌ **`selfPatterns` / self-click identifiers** — the submit tool serializes only
+  `policies` + `disableHosts`; your own attribution ids never leave your machine.
+- ❌ Credentials, API keys, or tokens.
+- ❌ User data, traffic, revenue, or any telemetry.
+- ❌ Your source or your build. Tier 2 reads the crx you **already published** to
+  the Web Store — CI fetches that public artifact; you upload nothing.
+
+So the only substantive disclosure is your **policy configuration** — which
+affiliate networks you honor and which merchants you stand down on. That is
+inherent to a verify-by-reproduction showcase: CI can only reproduce a grade from
+inputs it can see. Two things to know before you decide:
+
+- **Don't want to reveal a custom list?** Submit with `policySet: allPolicies`
+  (or `allPolicies+experimental`). That discloses only "we ship the standard
+  verified set" — no custom array — and still earns an **A**.
+- **This repo is public and Dupe-owned.** A `custom` submission puts a
+  machine-readable map of your affiliate policy in a competitor-adjacent public
+  repo. That's a deliberate trade for a verified badge — make it with eyes open,
+  or stick to `allPolicies`, or just use the local SVG grade card, which makes no
+  public claim at all.
+
 ## Add yours — one prompt
 
 Graded A/A+? Hand this to the same coding agent that did your integration, pointed
@@ -55,9 +91,14 @@ end: derive my submission details from this extension's standdown integration �
 extension name, policy set, the hosts I disable, and (if it's published) my Chrome
 Web Store id — then generate the submission with the submit tool, build the
 CI-authoritative card, and open a PR to dupe-com/standdown. Ask me only for my
-GitHub handle and today's date. If my extension is published, also run the Tier 2
-live-verify for an A+. Never hand-edit the generated grade, SHA, card, or
-SHOWCASE.md — CI re-checks all of it, so a hand-edit just fails the build.
+GitHub handle and today's date. Before opening the PR, tell me exactly what the
+submission will disclose (for a custom policy set: my resolved policies + disabled
+hosts, in a public Dupe-owned repo) and what it will not (no self-click ids, keys,
+user data, or source), and ask whether to proceed, submit as allPolicies to
+disclose less, or stop — do not publish without my explicit yes. If my extension
+is published, also run the Tier 2 live-verify for an A+. Never hand-edit the
+generated grade, SHA, card, or SHOWCASE.md — CI re-checks all of it, so a
+hand-edit just fails the build.
 ```
 
 That single prompt runs the whole flow — submit, build, verify, and open the PR

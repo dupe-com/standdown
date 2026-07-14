@@ -13,6 +13,12 @@ disabled hosts, and — if published — its Chrome Web Store id), generate the
 submission with the submit tool, build the CI-authoritative card, and open a PR to
 `dupe-com/standdown`. Ask me only for my GitHub handle and today's date.
 
+Before opening the PR, tell me exactly what the submission will disclose — for a
+`custom` policy set that's my resolved policies + disabled hosts, published to a
+public Dupe-owned repo — and what it will **not** send (no self-click ids, keys,
+user data, or source). Then ask whether to **proceed**, **submit as `allPolicies`
+to disclose less**, or **stop**; don't publish without my explicit yes.
+
 If my extension is published, also run the Tier 2 live-verify for an A+. Never
 hand-edit the generated grade, SHA, card, or `SHOWCASE.md` — CI re-checks all of
 it, so a hand-edit just fails the build.
