@@ -20,8 +20,11 @@ describe('conformanceGrade', () => {
     const { result, observations } = await conformanceGrade({
       policies: allPolicies,
     });
-    const bareRanEaid = observations.find(({ scenario }) =>
-      scenario.id.startsWith('rakuten:attribution:landing-group:ranEAID'),
+    // Exact id — a prefix match would also catch the `ranEAID+ranSiteID`
+    // control (emitted first) and pass even if the bare-ranEAID case regressed.
+    const bareRanEaid = observations.find(
+      ({ scenario }) =>
+        scenario.id === 'rakuten:attribution:landing-group:ranEAID',
     );
 
     expect(bareRanEaid).toBeDefined();
