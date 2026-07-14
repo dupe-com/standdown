@@ -34,6 +34,7 @@ export class StanddownSession {
   readonly #maxAuditEntries: number;
   readonly #selfExemptionScope: 'policy' | 'session';
   readonly #readOnlyAuditLog: AuditEntry[] = [];
+  #stateLock: Promise<unknown> = Promise.resolve();
 
   constructor(
     store: StateStore,
@@ -211,11 +212,33 @@ export class StanddownSession {
   }
 
   async exportAuditLog(): Promise<AuditEntry[]> {
-    const state = await this.#loadState();
-    return trimAuditLog(
-      [...state.auditLog, ...this.#readOnlyAuditLog],
-      this.#maxAuditEntries,
-    ).map(cloneAuditEntry);
+    return this.#serialize(async () => {
+      const state = await this.#loadState();
+      return trimAuditLog(
+        [...state.auditLog, ...this.#readOnlyAuditLog],
+        this.#maxAuditEntries,
+      ).map(cloneAuditEntry);
+    });
+  }
+
+  /**
+   * Serializes every state read-modify-write onto a single FIFO chain.
+   * #withState and #failClosedWithAudit each do an async load -> mutate -> save;
+   * without this, two overlapping evaluations both load the pre-write snapshot
+   * and the second save clobbers the first, so a just-recorded stand-down can be
+   * lost. The adapter's own hooks coalesce via a `pending` flag, but external
+   * callers driving evaluate()/ingest() concurrently are not otherwise
+   * serialized, so this lock is what makes them safe. It also gives
+   * read-after-write consistency: a shouldStandDown queued after an ingest reads
+   * that ingest's committed state.
+   */
+  #serialize<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.#stateLock.then(task, task);
+    this.#stateLock = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   async #withState(
@@ -228,44 +251,46 @@ export class StanddownSession {
     advertiserHost?: string,
     opts: { persist?: boolean } = {},
   ): Promise<Decision> {
-    let state: StanddownState;
+    return this.#serialize(async () => {
+      let state: StanddownState;
 
-    try {
-      state = await this.#loadState();
-    } catch {
-      return failClosedDecision('store-error');
-    }
+      try {
+        state = await this.#loadState();
+      } catch {
+        return failClosedDecision('store-error');
+      }
 
-    const result = fn(state);
+      const result = fn(state);
 
-    if (this.#auditLog) {
-      const entry = auditEntry({
-        time: now,
-        action,
-        advertiserHost:
-          advertiserHost ?? result.detection?.strongest?.advertiserHost,
-        detection: result.detection,
-        decision: result.decision,
-      });
+      if (this.#auditLog) {
+        const entry = auditEntry({
+          time: now,
+          action,
+          advertiserHost:
+            advertiserHost ?? result.detection?.strongest?.advertiserHost,
+          detection: result.detection,
+          decision: result.decision,
+        });
+
+        if (opts.persist === false) {
+          appendAuditEntry(this.#readOnlyAuditLog, entry, this.#maxAuditEntries);
+        } else {
+          appendAuditEntry(state.auditLog, entry, this.#maxAuditEntries);
+        }
+      }
 
       if (opts.persist === false) {
-        appendAuditEntry(this.#readOnlyAuditLog, entry, this.#maxAuditEntries);
-      } else {
-        appendAuditEntry(state.auditLog, entry, this.#maxAuditEntries);
+        return result.decision;
       }
-    }
 
-    if (opts.persist === false) {
+      try {
+        await this.#store.save(state);
+      } catch {
+        return failClosedDecision('store-error');
+      }
+
       return result.decision;
-    }
-
-    try {
-      await this.#store.save(state);
-    } catch {
-      return failClosedDecision('store-error');
-    }
-
-    return result.decision;
+    });
   }
 
   async #failClosedWithAudit(
@@ -281,25 +306,27 @@ export class StanddownSession {
       return decision;
     }
 
-    try {
-      const state = await this.#loadState();
-      appendAuditEntry(
-        state.auditLog,
-        auditEntry({
-          time: now,
-          action,
-          advertiserHost,
-          detection,
-          decision,
-        }),
-        this.#maxAuditEntries,
-      );
-      await this.#store.save(state);
-    } catch {
-      return failClosedDecision('store-error');
-    }
+    return this.#serialize(async () => {
+      try {
+        const state = await this.#loadState();
+        appendAuditEntry(
+          state.auditLog,
+          auditEntry({
+            time: now,
+            action,
+            advertiserHost,
+            detection,
+            decision,
+          }),
+          this.#maxAuditEntries,
+        );
+        await this.#store.save(state);
+      } catch {
+        return failClosedDecision('store-error');
+      }
 
-    return decision;
+      return decision;
+    });
   }
 
   async #loadState(): Promise<StanddownState> {
