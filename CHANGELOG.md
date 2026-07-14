@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.1 - 2026-07-14
+
+Content-adapter hardening from dogfooding the Dupe extension migration and a
+review of the SPA re-evaluation example. **Touches `src`** — a small,
+safe-direction guard; no change to how a live controller decides.
+
+### Fixed
+
+- The content controller's public `evaluate()` now fails closed after
+  `dispose()`: it returns a `controller-disposed` decision and no longer fires
+  `onDecision`. Previously only the internal `scheduleEvaluation` path checked
+  the `disposed` flag, so an adopter driving `evaluate()` from their own
+  navigation signal could re-run a torn-down controller and re-fire `onDecision`
+  after teardown.
+
+### Docs
+
+- Documented that the content adapter's `history.pushState`/`replaceState` hooks
+  run in the content script's **isolated world** and therefore miss a page's own
+  main-world SPA route changes (only `popstate` crosses worlds). `ADOPTING.md`
+  and `examples/content-extension/` now recommend driving `controller.evaluate()`
+  from a single navigation source, and the example spells out the URL-poll
+  fallback's tradeoffs (latency, duplicate work, clearing the timer on teardown).
+
 ## 0.2.6 - 2026-07-13
 
 Hardening from real integration feedback (an extensions reviewer hit the domain
