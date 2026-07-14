@@ -127,6 +127,67 @@ describe('selfExemptionScope', () => {
     ).resolves.toMatchObject({ standDown: true, policyId: 'beta' });
   });
 
+  it('session scope: a competing SAME-network click (different value) still stands down', async () => {
+    const session = new StanddownSession(new MemoryStateStore(), {
+      selfExemptionScope: 'session',
+    });
+    // Value-specific self-pattern (the documented, correct way to author one).
+    const selfPatterns = [
+      { name: 'alfa_click', value: 'me', match: 'equals' as const, networkId: 'alfa' },
+    ];
+
+    // Our own click (value-matched) → exempt, records the host exemption.
+    await expect(
+      session.ingest(
+        { url: `${MERCHANT}/p?alfa_click=me`, now: 0, selfPatterns },
+        [alfa],
+      ),
+    ).resolves.toMatchObject({ standDown: false });
+
+    // A competitor's alfa click on the same host carries a DIFFERENT value, so it
+    // is not ours. The persisted exemption must not swallow it.
+    await expect(
+      session.ingest(
+        { url: `${MERCHANT}/p?alfa_click=rival`, now: 1_000, selfPatterns },
+        [alfa],
+      ),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'alfa' });
+  });
+
+  it('session scope: our own value keeps re-exempting, and the lingering cookie stays ours', async () => {
+    const session = new StanddownSession(new MemoryStateStore(), {
+      selfExemptionScope: 'session',
+    });
+    const selfPatterns = [
+      { name: 'alfa_click', value: 'me', match: 'equals' as const, networkId: 'alfa' },
+    ];
+
+    await expect(
+      session.ingest(
+        { url: `${MERCHANT}/p?alfa_click=me`, now: 0, selfPatterns },
+        [alfa],
+      ),
+    ).resolves.toMatchObject({ standDown: false });
+
+    // Our own click id re-appearing is a self-match, so it stays exempt (the fix
+    // does not over-correct and stand us down on our own attribution).
+    await expect(
+      session.ingest(
+        { url: `${MERCHANT}/p?alfa_click=me`, now: 1_000, selfPatterns },
+        [alfa],
+      ),
+    ).resolves.toMatchObject({ standDown: false });
+
+    // The lingering first-party cookie is ambient, not a competing param, so it
+    // is still re-attributed to us — the ignore_param case is preserved.
+    await expect(
+      session.ingest(
+        { url: `${MERCHANT}/checkout`, now: 2_000, cookieNames: ['alfa_cookie'] },
+        [alfa],
+      ),
+    ).resolves.toMatchObject({ standDown: false, reason: 'self-exempted-session' });
+  });
+
   it('session scope never lifts an already-active stand-down (monotone)', async () => {
     const store = new MemoryStateStore();
     const session = new StanddownSession(store, {
