@@ -47,8 +47,12 @@ in the **main world**, which the isolated-world patch never sees. Only `popstate
 
 So on a real SPA merchant site, the adapter's history hooks alone will miss most
 client-side route changes. Drive re-evaluation yourself by calling the
-controller's `evaluate()` from whatever navigation signal you already have — a
-`MutationObserver` on the app root, a framework router hook, or (as a last
-resort) a URL poll. `content.js` in this example shows the URL-poll version.
-`evaluate()` recomputes from the current page signals and fires `onDecision`, so
-the banner appears and disappears as attribution comes and goes without a reload.
+controller's `evaluate()` from a navigation signal, and feed it from **one**
+source (a framework router hook is ideal) — calling `evaluate()` from several
+sources at once can run overlapping evaluations that lose-update the session
+store, since external `evaluate()` calls are not coalesced. `content.js` shows a
+last-resort, framework-agnostic URL poll and spells out its tradeoffs (latency,
+duplicate work, and clearing the timer on teardown, since the public `evaluate()`
+does not check the disposed flag). `evaluate()` recomputes from the current page
+signals and fires `onDecision`, so the banner appears and disappears as
+attribution comes and goes without a reload.

@@ -25,17 +25,37 @@ const standdown = createContentStanddown({
   onDecision: applyDecision,
 });
 
-// Recommended for SPAs: re-evaluate on client-side route changes that the
-// adapter's isolated-world history hooks cannot see. Wire this to whatever
-// navigation signal you already have; a URL poll is the lowest-common-denominator
-// version. `evaluate()` recomputes from current page signals and fires onDecision.
+// Recommended for SPAs: re-evaluate on client-side route changes the adapter's
+// isolated-world history hooks cannot see. `evaluate()` recomputes from current
+// page signals and fires onDecision.
+//
+// PREFER A SINGLE NAVIGATION SOURCE. Hook your framework's router and call
+// evaluate() once per real navigation. Feeding evaluate() from more than one
+// source (e.g. the poll below AND the adapter's own popstate hook) can run two
+// evaluations concurrently; they are not coalesced, so overlapping runs can
+// lose-update the shared session store. One source per navigation avoids that.
+//
+// The URL poll below is only a last-resort, framework-agnostic fallback. Know
+// the tradeoffs before you ship it:
+//   - up to POLL_MS of latency before a newly-attributed page re-evaluates, so
+//     the gate can briefly read the stale decision on an already-attributed page,
+//   - it also fires for navigations the adapter already caught (popstate,
+//     isolated-world pushState), duplicating that work and reopening the race above.
+const POLL_MS = 1000;
 let lastUrl = location.href;
-setInterval(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    void standdown.evaluate();
-  }
-}, 1000);
+const navPoll = setInterval(() => {
+  if (location.href === lastUrl) return;
+  lastUrl = location.href;
+  // evaluate() fails closed internally, but ingest can still reject; swallow so
+  // one bad tick doesn't become an unhandled rejection and kill the poll.
+  standdown.evaluate().catch(() => {});
+}, POLL_MS);
+
+// On teardown (extension update, SPA unmount) clear the timer yourself. The
+// public evaluate() does not check the controller's disposed flag, so a leftover
+// interval would keep re-firing onDecision after dispose():
+//   clearInterval(navPoll);
+//   standdown.dispose();
 
 // Gate your on-page affiliate action on the decision. Fail closed: only act when
 // NOT standing down. The content plane can't observe redirect chains, so a clean
