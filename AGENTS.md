@@ -179,7 +179,10 @@ is the correct sensor for any real host extension. Pass `DISABLE_HOSTS` for any
 merchants you disable unconditionally.
 
 ```sh
-git clone https://github.com/dupe-com/standdown && cd standdown/audit && npm install
+git clone https://github.com/dupe-com/standdown && cd standdown
+git checkout v0.2.6            # the standdown version you installed — keep them in lockstep
+bun install && bun run build   # build the lib the grader imports (dist/ is gitignored)
+cd audit && npm install
 DISABLE_HOSTS="ebay.com,homedepot.com" npx tsx grade/conformance.ts
 #   standdown conformance grade: A+  (100/100)
 ```

@@ -198,6 +198,7 @@ down instead of hijacking existing attribution. Two graders:
   number to report, and the correct sensor for any real host extension.
 
   ```sh
+  bun install && bun run build   # build the lib the grader imports (dist/ is gitignored)
   cd audit && npm install
   DISABLE_HOSTS="ebay.com,homedepot.com" npx tsx grade/conformance.ts
   #   standdown conformance grade: A+  (100/100)
