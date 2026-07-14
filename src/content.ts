@@ -116,6 +116,10 @@ export function createContentStanddown(
   windowLike?.addEventListener?.('popstate', onPopState);
 
   async function evaluate(): Promise<Decision> {
+    if (disposed) {
+      return failClosedDecision('controller-disposed');
+    }
+
     let signals: Signals;
 
     try {

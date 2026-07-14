@@ -32,6 +32,28 @@ Then open `chrome://extensions`, enable Developer mode, and load
 
 To see both states: visit a plain merchant page (no attribution → a green "clear
 to offer" banner) versus the same page carrying prior affiliate attribution in
-the URL (e.g. `?cjevent=abc123` → the example stands down and shows nothing). SPA
-navigations re-evaluate automatically via the adapter's history hooks, so the
-banner appears and disappears as attribution comes and goes without a reload.
+the URL (e.g. `?cjevent=abc123` → the example stands down and shows nothing).
+
+### Re-evaluating on SPA navigations
+
+The adapter patches `history.pushState`/`replaceState` and listens for
+`popstate`, but there is a catch worth understanding before you rely on it.
+
+A content script runs in an **isolated world**. Patching `history.pushState`
+there only intercepts `pushState` calls made *from the isolated world*. When the
+page's own single-page-app code changes the route, it calls `history.pushState`
+in the **main world**, which the isolated-world patch never sees. Only `popstate`
+(a DOM event dispatched on `window`) reliably reaches both worlds.
+
+So on a real SPA merchant site, the adapter's history hooks alone will miss most
+client-side route changes. Drive re-evaluation yourself by calling the
+controller's `evaluate()` from a navigation signal, and feed it from **one**
+source (a framework router hook is ideal) — calling `evaluate()` from several
+sources at once can run overlapping evaluations that lose-update the session
+store, since external `evaluate()` calls are not coalesced. `content.js` shows a
+last-resort, framework-agnostic URL poll and spells out its tradeoffs (latency,
+duplicate work, and clearing the timer on teardown, since a leftover interval
+keeps ticking even though `evaluate()` fails closed after `dispose()`).
+`evaluate()` recomputes from the current page
+signals and fires `onDecision`, so the banner appears and disappears as
+attribution comes and goes without a reload.

@@ -5,7 +5,7 @@ import { createContentStanddown } from 'standdown/content';
 // (location.href, document.referrer, first-party cookie NAMES). It needs no
 // webNavigation/webRequest permissions — which is exactly why an MV3 extension
 // that can't hold those permissions uses standdown/content instead of webext.
-createContentStanddown({
+const standdown = createContentStanddown({
   policies: allPolicies,
   storage: 'session', // or 'local-ttl' for a sliding 24h envelope
   // Declare your own site + click IDs so the library never stands you down
@@ -13,11 +13,50 @@ createContentStanddown({
   // publisherSites: ['your-site.com'],
   // selfPatterns: [{ name: 'your_click_id', networkId: 'cj' }],
 
-  // onDecision fires on the initial evaluation AND on every SPA navigation
-  // (the adapter hooks pushState/replaceState/popstate), so the gate below
-  // stays current without any extra wiring.
+  // onDecision fires on the initial evaluation and whenever the adapter's own
+  // history hooks (pushState/replaceState/popstate) fire.
+  //
+  // ISOLATED-WORLD CAVEAT: those hooks patch `history` in the world this script
+  // runs in. In a real content script that is the *isolated* world, so a SPA
+  // that calls `history.pushState` from its own (main-world) code will NOT
+  // trigger re-evaluation. Only `popstate` reliably crosses worlds. If your
+  // target sites are single-page apps, drive re-evaluation yourself from a
+  // navigation detector — see below.
   onDecision: applyDecision,
 });
+
+// Recommended for SPAs: re-evaluate on client-side route changes the adapter's
+// isolated-world history hooks cannot see. `evaluate()` recomputes from current
+// page signals and fires onDecision.
+//
+// PREFER A SINGLE NAVIGATION SOURCE. Hook your framework's router and call
+// evaluate() once per real navigation. Feeding evaluate() from more than one
+// source (e.g. the poll below AND the adapter's own popstate hook) can run two
+// evaluations concurrently; they are not coalesced, so overlapping runs can
+// lose-update the shared session store. One source per navigation avoids that.
+//
+// The URL poll below is only a last-resort, framework-agnostic fallback. Know
+// the tradeoffs before you ship it:
+//   - up to POLL_MS of latency before a newly-attributed page re-evaluates, so
+//     the gate can briefly read the stale decision on an already-attributed page,
+//   - it also fires for navigations the adapter already caught (popstate,
+//     isolated-world pushState), duplicating that work and reopening the race above.
+const POLL_MS = 1000;
+let lastUrl = location.href;
+const navPoll = setInterval(() => {
+  if (location.href === lastUrl) return;
+  lastUrl = location.href;
+  // evaluate() fails closed internally, but ingest can still reject; swallow so
+  // one bad tick doesn't become an unhandled rejection and kill the poll.
+  standdown.evaluate().catch(() => {});
+}, POLL_MS);
+
+// On teardown (extension update, SPA unmount) clear the timer yourself. After
+// dispose() the controller's evaluate() fails closed and stops firing onDecision,
+// but a leftover interval would still tick and call it every POLL_MS — clear it
+// so re-evaluation actually stops:
+//   clearInterval(navPoll);
+//   standdown.dispose();
 
 // Gate your on-page affiliate action on the decision. Fail closed: only act when
 // NOT standing down. The content plane can't observe redirect chains, so a clean
