@@ -60,9 +60,14 @@ live-verify for an A+. Never hand-edit the generated grade, SHA, card, or
 SHOWCASE.md — CI re-checks all of it, so a hand-edit just fails the build.
 ```
 
-That single prompt runs the whole flow — submit, build, verify, open the PR (plus
-Tier 2 live-verify when your extension is published). The mechanics it follows are
-right below, if you'd rather run them yourself.
+That single prompt runs the whole flow — submit, build, verify, and open the PR
+(plus Tier 2 live-verify when your extension is published). Expect one manual
+step at the end: pushing the branch and opening the PR are outward actions on a
+repo the agent doesn't own, so most coding agents (Claude Code included) will
+pause and hand you the exact `git push` / PR-create command to run yourself —
+that's the intended confirmation, not a failure. Everything up to that point
+(grade, card, submission file) is generated for you. The mechanics it follows
+are right below, if you'd rather run them yourself.
 
 ## Or by hand
 
