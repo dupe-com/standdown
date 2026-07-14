@@ -52,7 +52,8 @@ source (a framework router hook is ideal) — calling `evaluate()` from several
 sources at once can run overlapping evaluations that lose-update the session
 store, since external `evaluate()` calls are not coalesced. `content.js` shows a
 last-resort, framework-agnostic URL poll and spells out its tradeoffs (latency,
-duplicate work, and clearing the timer on teardown, since the public `evaluate()`
-does not check the disposed flag). `evaluate()` recomputes from the current page
+duplicate work, and clearing the timer on teardown, since a leftover interval
+keeps ticking even though `evaluate()` fails closed after `dispose()`).
+`evaluate()` recomputes from the current page
 signals and fires `onDecision`, so the banner appears and disappears as
 attribution comes and goes without a reload.

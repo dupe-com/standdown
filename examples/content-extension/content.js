@@ -51,9 +51,10 @@ const navPoll = setInterval(() => {
   standdown.evaluate().catch(() => {});
 }, POLL_MS);
 
-// On teardown (extension update, SPA unmount) clear the timer yourself. The
-// public evaluate() does not check the controller's disposed flag, so a leftover
-// interval would keep re-firing onDecision after dispose():
+// On teardown (extension update, SPA unmount) clear the timer yourself. After
+// dispose() the controller's evaluate() fails closed and stops firing onDecision,
+// but a leftover interval would still tick and call it every POLL_MS — clear it
+// so re-evaluation actually stops:
 //   clearInterval(navPoll);
 //   standdown.dispose();
 

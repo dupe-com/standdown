@@ -266,6 +266,37 @@ describe('content adapter', () => {
 
     controller.dispose();
   });
+
+  it('fails closed and stops firing onDecision after dispose', async () => {
+    let now = 7_000;
+    const decisions: Decision[] = [];
+    const windowLike = new FakeContentWindow(
+      'https://merchant.example/product',
+      '',
+    );
+    const controller = createContentStanddown({
+      policies: [cjPolicy],
+      window: windowLike,
+      now: () => now,
+      onDecision: (decision) => {
+        decisions.push(decision);
+      },
+    });
+
+    await controller.ready;
+    const countBeforeDispose = decisions.length;
+
+    controller.dispose();
+
+    now = 7_500;
+    windowLike.location.href = 'https://merchant.example/product?cjevent=abc';
+    await expect(controller.evaluate()).resolves.toMatchObject({
+      standDown: true,
+      reason: 'controller-disposed',
+    });
+
+    expect(decisions).toHaveLength(countBeforeDispose);
+  });
 });
 
 class FakeContentWindow implements ContentWindowLike {
