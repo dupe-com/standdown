@@ -214,14 +214,19 @@ export interface SessionRecord {
  * A session-scoped self-exemption grant for one advertiser host: the integrator's
  * own attribution (via `selfPatterns`) was seen for these policies/networks, so
  * later navigations to the host re-apply the exemption for those same scopes.
- * Held for the lifetime of the session state; never lifts an already-active
- * stand-down and never covers a `disabled-host` match.
+ * Bounded by `sessionExemptionTtlMs`, measured from `grantedAt`: once `expiresAt`
+ * passes the record is pruned and a later self-navigation starts a fresh window.
+ * With the TTL disabled the record is held for the lifetime of the session state.
+ * Never lifts an already-active stand-down and never covers a `disabled-host`
+ * match.
  */
 export interface ExemptionRecord {
   advertiserHost: string;
   policyIds: string[];
   networkIds: string[];
   grantedAt: number;
+  /** Absolute time the exemption lapses. Omitted when the TTL is disabled. */
+  expiresAt?: number;
 }
 
 export interface StanddownState {

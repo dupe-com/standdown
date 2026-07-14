@@ -37,6 +37,12 @@ export interface CreateUrlStanddownOptions {
    * decisions (Dupe's `ignore_param` semantics).
    */
   readonly selfExemptionScope?: 'policy' | 'session';
+  /**
+   * TTL for a `selfExemptionScope: 'session'` exemption, measured from when it
+   * was first granted. Defaults to 30 minutes; `0` or any non-positive value
+   * disables expiry (lifetime of the session state).
+   */
+  readonly sessionExemptionTtlMs?: number;
   readonly onDecision?: (decision: Decision, signals: Signals) => void;
 }
 
@@ -170,11 +176,16 @@ export function collectUrlSignals(
 function urlSessionOptions(
   opts: CreateUrlStanddownOptions,
 ):
-  | { auditLog?: boolean; selfExemptionScope?: 'policy' | 'session' }
+  | {
+      auditLog?: boolean;
+      selfExemptionScope?: 'policy' | 'session';
+      sessionExemptionTtlMs?: number;
+    }
   | undefined {
   const sessionOpts: {
     auditLog?: boolean;
     selfExemptionScope?: 'policy' | 'session';
+    sessionExemptionTtlMs?: number;
   } = {};
 
   if (opts.auditLog !== undefined) {
@@ -183,6 +194,10 @@ function urlSessionOptions(
 
   if (opts.selfExemptionScope !== undefined) {
     sessionOpts.selfExemptionScope = opts.selfExemptionScope;
+  }
+
+  if (opts.sessionExemptionTtlMs !== undefined) {
+    sessionOpts.sessionExemptionTtlMs = opts.sessionExemptionTtlMs;
   }
 
   return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;
