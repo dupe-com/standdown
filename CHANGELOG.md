@@ -24,6 +24,44 @@ safe-direction guard; no change to how a live controller decides.
   from a single navigation source, and the example spells out the URL-poll
   fallback's tradeoffs (latency, duplicate work, clearing the timer on teardown).
 
+## 0.3.0 - 2026-07-14
+
+Backfilled entry. New `url` adapter, a self-exemption fan-out helper,
+construction-time policy lint warnings, and a Rakuten detection fix. **Touches
+`src`** across several adapters; the only decision-behavior change is the
+Rakuten fix (safe-stricter — it stands down in a case it previously missed).
+
+### Added
+
+- **`standdown/url` adapter** for URL-only decision contexts — no page, cookie,
+  or redirect-chain signals, just a URL in and a `Decision` out
+  (`src/url.ts`). For callers that only have a destination URL to reason about.
+- **`expandSelfExemption(matcher, policies)`** — fans a single global
+  `ignore_param` matcher out to a scoped self-exemption per policy, derived from
+  the same `policies` array so it stays in sync as networks are added
+  (`src/self-exemption.ts`). This is the sanctioned way to express an
+  "our click wins regardless of network" param without a name-only clear-all.
+- **`lintPolicies` construction warnings.** Adapters now surface config lint
+  warnings when a controller is constructed (`src/validation.ts`, wired through
+  the `content`, `webext`, and `url` adapters), so misconfigured policy sets
+  announce themselves at setup instead of failing silently at decision time.
+
+### Fixed
+
+- **Rakuten: stand down on a bare `ranEAID`.** A landing carrying a Rakuten
+  `ranEAID` with no accompanying click id is now treated as prior attribution
+  and stands down; the grader also grades every landing group rather than
+  stopping early (#48).
+
+### Docs / tooling
+
+- CI-verified "Graded with standdown" showcase wall of fame, with a Tier 2
+  live-verify path that grades a published `.crx`, and the first showcased
+  extension (Dupe.com, conformance A+ 100/100).
+- Claude Code plugin marketplace: `/standdown:setup`, `/standdown:adopt`,
+  `/standdown:showcase`, plus agent-first setup/integration docs and a
+  single-sourced adoption playbook.
+
 ## 0.2.6 - 2026-07-13
 
 Hardening from real integration feedback (an extensions reviewer hit the domain
