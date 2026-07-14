@@ -6,6 +6,7 @@ export {
 export { classifyReferrer, detect, domainRuleMatchesUrl } from './detect';
 export { guardActivation } from './guard';
 export { fromRakutenPolicy, toRakutenPolicy } from './rakuten';
+export { expandSelfExemption } from './self-exemption';
 export { MemoryStateStore, StanddownSession } from './session';
 export type {
   ActivationBenefit,
