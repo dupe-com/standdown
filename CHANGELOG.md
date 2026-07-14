@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.2 - 2026-07-14
+
+Concurrency fix in decision persistence. **Touches `src`** — a correctness fix;
+no API change.
+
+### Fixed
+
+- Serialize the session's state read-modify-write path so concurrent
+  evaluations can't lose-update the store. `StanddownSession.ingest` loads,
+  mutates, and saves state asynchronously; the adapter's own navigation hooks
+  coalesce, but callers that drive `evaluate()`/`ingest()` from their own
+  navigation signal (as the content adapter docs recommend) are not otherwise
+  serialized. Two overlapping evaluations could both load the pre-write snapshot
+  and have the second save clobber the first, dropping a just-recorded
+  stand-down record — worst case flipping a host from `standDown: true` back to
+  `false`. A FIFO lock now runs state operations in order, and gives
+  read-after-write consistency for a `shouldStandDown` queued right after an
+  `ingest` (#55).
+
 ## 0.3.1 - 2026-07-14
 
 Content-adapter hardening from dogfooding the Dupe extension migration and a
