@@ -86,7 +86,7 @@ new logic. Map each inventory row to exactly one library concept.
 | Affiliate params that trigger stand-down (`cjevent`, `ranSiteID`, …) | `detection.landingParams` | Grouped `anyOf` / `allOf`; `{ name }` alone = presence, add `value` + `match:'equals'` for value checks. |
 | Network redirect/rotator hostnames (`linksynergy`, `anrdoezrs`) | `detection.redirectDomains` | `{ pattern, kind:'suffix' }`. Observed only by the webext adapter's `webRequest` plane. |
 | Cookie checks | `detection.cookiePatterns` | **NAME-ONLY.** `{ name, match:'exact'\|'substring' }`. Values are never inspected — see the divergence note below. |
-| Your **own** attribution params (`ignore_param`) | `selfPatterns` + `selfExemptionScope` | `{ name, value?, match?, networkId }`. Scope controls how long the exemption sticks — this is the highest-risk mapping. |
+| Your **own** attribution params (`ignore_param`) | `selfPatterns` (+ `selfExemptionScope`) | `{ name, value?, match?, networkId }`. Two axes: **duration** (`selfExemptionScope`) and **breadth** (which networks it clears). Network-specific id → scope with `networkId`; a *global* `ignore_param` that clears any network → `expandSelfExemption(matcher, policies)`. The highest-risk mapping. |
 | "Never operate on this host" merchant blocks (`disable_domains`) | `detection.disableHosts` | `{ pattern, kind:'suffix'\|'regex' }`. Unconditional, strongest match, **not liftable** by any self-exemption. |
 | Per-network minimum stand-down window (`standDownCookieDuration`) | `standdown.minDurationMs` with `sessionRule:'session-or-min'` | Calibrate to the production number. |
 | Session vs persisted stand-down | adapter `storage: 'session'` \| `'local-ttl'` | `local-ttl` survives a `sessionStorage` clear within a sliding 24h envelope. |
@@ -144,6 +144,16 @@ Notes that generalize to any migration:
   never had and could let the extension **activate** on a later param-less visit
   where the adopter stood down — a more-permissive change that hijacks a sale. Only use
   `'session'` if the homegrown code actually persisted the exemption.
+- **Breadth is a separate axis from duration.** `selfExemptionScope` sets *how
+  long* an exemption lasts; **which networks** a self-param clears is set per
+  pattern. A network-specific id (a CJ `PID`) should scope to that network only
+  (`networkId: 'cj'`) — it means nothing to Rakuten. But a *global* `ignore_param`
+  ("our click wins regardless of which network") must clear **every** policy, and
+  an **unscoped** pattern does **not** clear — it is only reported as a self-match.
+  Use `expandSelfExemption(matcher, policies)` to fan one matcher out to a scoped
+  exemption per policy, derived from the same `policies` array so it stays in sync
+  as you add networks. Keep the matcher **value-specific** (your exact click id),
+  never name-only — a name-only clear-all would fire on any URL carrying that param.
 - **Match the current fleet, not the "complete" library.** The bundled
   `amazonPolicy` always stands down on Amazon; if the extension currently stays
   *active* on Amazon (`ALLOW_AMAZON=true`), **exclude** it. Same for any host the

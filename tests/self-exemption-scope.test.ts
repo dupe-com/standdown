@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type Behavior,
+  expandSelfExemption,
   MemoryStateStore,
   type StanddownPolicy,
   StanddownSession,
@@ -193,6 +194,59 @@ describe('selfExemptionScope', () => {
       session.ingest(
         { url: `${MERCHANT}/checkout`, now: 0, cookieNames: ['alfa_cookie'] },
         [alfa],
+      ),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'alfa' });
+  });
+});
+
+describe('expandSelfExemption', () => {
+  it('emits one policyId-scoped exemption per policy, preserving the matcher', () => {
+    expect(
+      expandSelfExemption({ name: 'PID', value: 'me', match: 'equals' }, [alfa, beta]),
+    ).toEqual([
+      { name: 'PID', value: 'me', match: 'equals', policyId: 'alfa' },
+      { name: 'PID', value: 'me', match: 'equals', policyId: 'beta' },
+    ]);
+  });
+
+  it('returns [] for an empty policy set', () => {
+    expect(expandSelfExemption({ name: 'PID' }, [])).toEqual([]);
+  });
+
+  it('clears stand-down for EVERY network in the set (the global ignore_param case)', async () => {
+    const session = new StanddownSession(new MemoryStateStore());
+    // One base matcher → scoped to both networks, so our click wins regardless of
+    // which network the landing carries.
+    const selfPatterns = expandSelfExemption(
+      { name: 'dupe_click', value: 'me', match: 'equals' },
+      [alfa, beta],
+    );
+
+    await expect(
+      session.ingest(
+        { url: `${MERCHANT}/p?alfa_click=1&dupe_click=me`, now: 0, selfPatterns },
+        [alfa, beta],
+      ),
+    ).resolves.toMatchObject({ standDown: false });
+
+    await expect(
+      session.ingest(
+        { url: `${MERCHANT}/p?beta_click=1&dupe_click=me`, now: 1_000, selfPatterns },
+        [alfa, beta],
+      ),
+    ).resolves.toMatchObject({ standDown: false });
+  });
+
+  it('an unscoped matcher does NOT clear (the gap the helper closes)', async () => {
+    const session = new StanddownSession(new MemoryStateStore());
+    // Same matcher, but unscoped — reported as a self-match yet the third-party
+    // stand-down still stands. This is exactly why the helper exists.
+    const selfPatterns = [{ name: 'dupe_click', value: 'me', match: 'equals' as const }];
+
+    await expect(
+      session.ingest(
+        { url: `${MERCHANT}/p?alfa_click=1&dupe_click=me`, now: 0, selfPatterns },
+        [alfa, beta],
       ),
     ).resolves.toMatchObject({ standDown: true, policyId: 'alfa' });
   });
