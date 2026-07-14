@@ -238,9 +238,19 @@ violate one, stop and flag it instead.
   manifest change requiring separate sign-off — do not slip it in.
 - **Fail toward standing down (I3).** Unknown, ambiguous, malformed, or storage-
   error states must **suppress activation**, never activate. This is the opposite
-  of the old code's fail-**open** to a stale `FALLBACK_POLICY`. When wiring the
-  content adapter, treat a `degraded` non-stand-down as a stand-down
-  (`decision.standDown || decision.degraded`) — partial signal coverage fails closed.
+  of the old code's fail-**open** to a stale `FALLBACK_POLICY`. **Read `degraded`
+  carefully — it means different things per adapter, and getting this wrong is the
+  single most common way to ship dead code.** In the full `webext` adapter,
+  `degraded: true` is an *exception* (a plane like `webRequest` went missing), so
+  folding it into stand-down (`decision.standDown || decision.degraded`) correctly
+  fails closed. In the `content` / `url` adapter it is the **normal steady state**:
+  those adapters see only the page/URL (no redirect chain), so *every* clean-page
+  non-stand-down decision carries `degraded: true` by design. Gating on
+  `standDown || degraded` there stands down on **every clean page** → the extension
+  never activates → the grader's **C-inert cap**. For a content/url adapter, gate
+  on **`decision.standDown` alone**; the fail-closed behavior you need already
+  lives in the decision itself (a malformed URL or any collection error resolves to
+  `standDown: true` without your help).
 - **Monotone updates only (I4).** Stand-downs only broaden/lengthen; an active
   stand-down is never lifted, and policy refresh may not edit activation rules.
   Do not reintroduce "clear the stand-down" behavior to match old self-click code
@@ -265,20 +275,47 @@ Do not remove the homegrown path on faith. Prove equivalence-or-better first.
 - [ ] **Shadow divergence report is clean.** Zero **dangerous-more-permissive**
   divergences on live traffic. Every remaining disagreement is classified
   safe-stricter or an approved human decision.
-- [ ] **Audit grade ≥ baseline.** Run the deterministic `conformanceGrade`
-  (`cd standdown/audit && npm install && DISABLE_HOSTS="<hosts you disable>" npx
-  tsx grade/conformance.ts`) on your migrated policy set and confirm the letter
-  grade meets or beats the Phase-3 baseline — this is the number to report. An
-  **A / A+** means it respects existing attribution on every tested network *and*
-  still activates when allowed. A **C (inert cap)** means it stopped activating at
-  all — over-suppression, which is safe for revenue but means you've shipped dead
-  code; investigate. An **F** means it hijacked attribution somewhere — the flag
-  must not go on. (The in-browser `grade/grade.ts` is an optional extra sensor and
-  reads **C (inert)** on most real host extensions — don't use it for the grade.)
+- [ ] **Audit grade ≥ baseline.** Run the deterministic `conformanceGrade` on
+  **your migrated policy set** and confirm the letter grade meets or beats the
+  Phase-3 baseline — this is the number to report. The grader lives in the repo
+  (it is *not* in the npm package), so set it up once — cloning the tag that
+  matches your installed `standdown` version, and building the lib the grader
+  imports:
+
+  ```sh
+  git clone https://github.com/dupe-com/standdown && cd standdown
+  git checkout v0.2.6            # the standdown version you installed — keep them in lockstep
+  bun install && bun run build   # build the lib the grader imports
+  cd audit && npm install
+  ```
+
+  Then grade **your own** policies by pointing `POLICY_PACK` at the module you
+  actually ship — the same array you pass the adapter, so the grade reflects
+  production rather than the bundled default — and passing the hosts you disable:
+
+  ```sh
+  POLICY_PACK=/abs/path/to/your/extension/policies.ts \
+    DISABLE_HOSTS="<hosts you disable>" npx tsx grade/conformance.ts
+  ```
+
+  **Without `POLICY_PACK` the grader scores standdown's bundled `allPolicies`, not
+  your set** — the number would be meaningless for your migration. (Your policies
+  module must resolve its imports from here; if it only imports from `standdown` /
+  `standdown/policies` it resolves against the built clone. See `audit/README.md`
+  if it pulls in your own path aliases.) An **A / A+** means it respects existing
+  attribution on every tested network *and* still activates when allowed. A **C
+  (inert cap)** means it stopped activating at all — over-suppression, safe for
+  revenue but you've shipped dead code; investigate (the most common cause is the
+  `|| degraded` mistake in Phase 4/I3 above). An **F** means it hijacked
+  attribution somewhere — the flag must not go on. (The in-browser `grade/grade.ts`
+  is an optional extra sensor and reads **C (inert)** on most real host extensions
+  — don't use it for the grade.)
 - [ ] **No fail-open assertions.** Add tests asserting that malformed input,
   storage errors, and unknown networks resolve to `standDown: true` (or a
-  suppressed activation), and that a `degraded` decision is treated as
-  stand-down. The migration must not have reintroduced any fail-open path.
+  suppressed activation). The migration must not have reintroduced any fail-open
+  path. On the `webext` adapter, also assert a `degraded` decision is treated as
+  stand-down; on a `content`/`url` adapter do **not** — `degraded` is the normal
+  clean-page state there, and gating on it makes the extension inert (Phase 4/I3).
 - [ ] **Flag is off by default** and the old code still present as rollback until
   the flag has been fully on and stable in production.
 
