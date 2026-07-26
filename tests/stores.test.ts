@@ -189,6 +189,32 @@ describe('StateStore implementations', () => {
     ]);
   });
 
+  it('round-trips a session exemption expiresAt through persistence', async () => {
+    const local = new FakeChromeStorageArea();
+    await new ChromeLocalStateStore(local, {
+      sessionId: 'browser-session-1',
+      now: () => 0,
+    }).save({
+      ...stateWithSessionAndInactivityRecords(),
+      exemptions: {
+        'session.example': {
+          advertiserHost: 'session.example',
+          policyIds: ['alfa'],
+          networkIds: ['alfa'],
+          grantedAt: 0,
+          expiresAt: 1_800_000,
+        },
+      },
+    });
+
+    const loaded = await new ChromeLocalStateStore(local, {
+      sessionId: 'browser-session-1',
+      now: () => 1_000,
+    }).load();
+
+    expect(loaded?.exemptions?.['session.example']?.expiresAt).toBe(1_800_000);
+  });
+
   it('drops session exemptions when the browser session changes', async () => {
     const local = new FakeChromeStorageArea();
     await new ChromeLocalStateStore(local, {

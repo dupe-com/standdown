@@ -9,6 +9,7 @@ import {
   validatePolicy,
 } from '../src';
 import { cjPolicy } from '../src/policies';
+import { SessionStorageStateStore, type WebStorageLike } from '../src/stores';
 
 const behaviors = [
   'suppress-prompts',
@@ -404,6 +405,40 @@ describe('StanddownSession', () => {
     ).resolves.toMatchObject({ standDown: false });
   });
 
+  it('bounds a session self-exemption by the default TTL across a persisted reload', async () => {
+    const storage = new FakeWebStorage();
+    const selfPatterns = [
+      { name: 'cjevent', value: 'own', match: 'equals' as const, policyId: 'cj' },
+    ];
+
+    const first = new StanddownSession(new SessionStorageStateStore(storage), {
+      selfExemptionScope: 'session',
+    });
+    await first.ingest(
+      { url: 'https://merchant.example/?cjevent=own', now: 0, selfPatterns },
+      [cjPolicy],
+    );
+
+    // A fresh session over the same persisted state: the exemption is reloaded
+    // through the store's parser rather than held in memory.
+    const revived = new StanddownSession(new SessionStorageStateStore(storage), {
+      selfExemptionScope: 'session',
+    });
+
+    // Past the 30-minute default TTL the exemption has lapsed, so the lingering
+    // cookie stands down exactly as it does without persistence.
+    await expect(
+      revived.ingest(
+        {
+          url: 'https://merchant.example/checkout',
+          now: 1_800_001,
+          cookieNames: ['cjevent_dc'],
+        },
+        [cjPolicy],
+      ),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+  });
+
   it('validates the test policy fixture', () => {
     expect(() =>
       validatePolicy(
@@ -606,4 +641,20 @@ function testPolicy(standdown: {
 
 function clonePolicy(policy: StanddownPolicy): StanddownPolicy {
   return JSON.parse(JSON.stringify(policy)) as StanddownPolicy;
+}
+
+class FakeWebStorage implements WebStorageLike {
+  readonly #items = new Map<string, string>();
+
+  getItem(key: string): string | null {
+    return this.#items.get(key) ?? null;
+  }
+
+  setItem(key: string, value: string): void {
+    this.#items.set(key, value);
+  }
+
+  removeItem(key: string): void {
+    this.#items.delete(key);
+  }
 }
