@@ -43,6 +43,13 @@ export interface CreateUrlStanddownOptions {
    * disables expiry (lifetime of the session state).
    */
   readonly sessionExemptionTtlMs?: number;
+  /**
+   * Resolves the key a decision's stand-down state is filed under. Defaults to
+   * the landing hostname; return a stable advertiser key to share one session
+   * across a merchant's hosts. See `StanddownSession`'s `sessionKey` for the
+   * scoping rules and for reading state back with `resolveSessionKey`.
+   */
+  readonly sessionKey?: (url: string) => string | undefined;
   readonly onDecision?: (decision: Decision, signals: Signals) => void;
 }
 
@@ -180,12 +187,14 @@ function urlSessionOptions(
       auditLog?: boolean;
       selfExemptionScope?: 'policy' | 'session';
       sessionExemptionTtlMs?: number;
+      sessionKey?: (url: string) => string | undefined;
     }
   | undefined {
   const sessionOpts: {
     auditLog?: boolean;
     selfExemptionScope?: 'policy' | 'session';
     sessionExemptionTtlMs?: number;
+    sessionKey?: (url: string) => string | undefined;
   } = {};
 
   if (opts.auditLog !== undefined) {
@@ -198,6 +207,10 @@ function urlSessionOptions(
 
   if (opts.sessionExemptionTtlMs !== undefined) {
     sessionOpts.sessionExemptionTtlMs = opts.sessionExemptionTtlMs;
+  }
+
+  if (opts.sessionKey !== undefined) {
+    sessionOpts.sessionKey = opts.sessionKey;
   }
 
   return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;

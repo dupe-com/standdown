@@ -67,6 +67,15 @@ export interface CreateStanddownOptions {
    * disables expiry (lifetime of the session state).
    */
   readonly sessionExemptionTtlMs?: number;
+  /**
+   * Resolves the key a navigation's stand-down state is filed under. Defaults
+   * to the landing hostname; return a stable advertiser key to share one
+   * session across a merchant's hosts. See `StanddownSession`'s `sessionKey`
+   * for the scoping rules. The controller's `shouldStandDown` /
+   * `shouldStandDownForUrl` resolve through it too, so a tab or URL read stays
+   * on the same bucket the navigation wrote.
+   */
+  readonly sessionKey?: (url: string) => string | undefined;
 }
 
 export interface StanddownWebextController {
@@ -198,7 +207,9 @@ export function createStanddown(
   const redirectChains = new Map<number, string[]>();
   const redirectRequestIds = new Map<number, string>();
   const initiators = new Map<number, string>();
-  const tabHosts = new Map<number, string>();
+  // The state key each tab's last navigation was filed under — the landing
+  // hostname unless a sessionKey resolver widened it.
+  const tabStateKeys = new Map<number, string>();
   const hasWebRequest =
     typeof chromeApi?.webRequest?.onBeforeRequest?.addListener === 'function';
   const hasWebNavigation =
@@ -252,7 +263,7 @@ export function createStanddown(
     redirectChains.delete(tabId);
     redirectRequestIds.delete(tabId);
     initiators.delete(tabId);
-    tabHosts.delete(tabId);
+    tabStateKeys.delete(tabId);
   };
 
   const onMessage: RuntimeMessageListener = (message, sender, sendResponse) => {
@@ -299,12 +310,6 @@ export function createStanddown(
     tabId: number,
     url: string,
   ): Promise<Decision> {
-    const host = hostFromUrl(url);
-
-    if (host !== undefined) {
-      tabHosts.set(tabId, host);
-    }
-
     const redirectChain = mode === 'webRequest' ? redirectChains.get(tabId) : undefined;
     const initiator = initiators.get(tabId);
 
@@ -323,6 +328,19 @@ export function createStanddown(
       // non-stand-down could be a false negative — mark the coverage partial.
       signalCoverage: mode === 'webRequest' ? 'full' : 'partial',
     });
+    // Remember the key ingest files this navigation under, so a later
+    // shouldStandDown(tabId) reads the bucket it wrote rather than the raw host.
+    const stateKey = session.resolveSessionKey(url);
+
+    if (stateKey !== undefined) {
+      tabStateKeys.set(tabId, stateKey);
+    } else {
+      // No key for this navigation (unparseable URL, or a resolver that threw),
+      // so ingest fails it closed. Drop whatever the tab's previous navigation
+      // cached: leaving it would let shouldStandDown(tabId) answer for this
+      // navigation out of the previous page's bucket, fail-open.
+      tabStateKeys.delete(tabId);
+    }
 
     return session.ingest(signals, activePolicies);
   }
@@ -331,26 +349,38 @@ export function createStanddown(
     tabId: number,
     at = now(),
   ): Promise<Decision> {
-    const host = tabHosts.get(tabId) ?? (await hostForTab(chromeApi, tabId));
+    const stateKey =
+      tabStateKeys.get(tabId) ??
+      stateKeyForUrl(await urlForTab(chromeApi, tabId));
 
-    if (host === undefined) {
+    if (stateKey === undefined) {
       return failClosedDecision('missing-tab-url');
     }
 
-    return session.shouldStandDown(host, at);
+    return session.shouldStandDown(stateKey, at);
   }
 
   async function shouldStandDownForUrl(
     url: string,
     at = now(),
   ): Promise<Decision> {
-    const host = hostFromUrl(url);
+    const stateKey = stateKeyForUrl(url);
 
-    if (host === undefined) {
+    if (stateKey === undefined) {
       return failClosedDecision('invalid-tab-url');
     }
 
-    return session.shouldStandDown(host, at);
+    return session.shouldStandDown(stateKey, at);
+  }
+
+  /**
+   * The bucket a URL's state lives in, for read paths that never saw the
+   * navigation. Resolved through the session so a configured `sessionKey` reads
+   * the key `ingest` wrote; `undefined` (unparseable URL, or a resolver that
+   * threw) fails the caller closed.
+   */
+  function stateKeyForUrl(url: string | undefined): string | undefined {
+    return url === undefined ? undefined : session.resolveSessionKey(url);
   }
 
   async function handleMessage(
@@ -438,7 +468,7 @@ export function createStanddown(
     redirectChains.clear();
     redirectRequestIds.clear();
     initiators.clear();
-    tabHosts.clear();
+    tabStateKeys.clear();
   }
 
   return {
@@ -462,12 +492,14 @@ function sessionOptions(
       auditLog?: boolean;
       selfExemptionScope?: 'policy' | 'session';
       sessionExemptionTtlMs?: number;
+      sessionKey?: (url: string) => string | undefined;
     }
   | undefined {
   const sessionOpts: {
     auditLog?: boolean;
     selfExemptionScope?: 'policy' | 'session';
     sessionExemptionTtlMs?: number;
+    sessionKey?: (url: string) => string | undefined;
   } = {};
 
   if (opts.auditLog !== undefined) {
@@ -480,6 +512,10 @@ function sessionOptions(
 
   if (opts.sessionExemptionTtlMs !== undefined) {
     sessionOpts.sessionExemptionTtlMs = opts.sessionExemptionTtlMs;
+  }
+
+  if (opts.sessionKey !== undefined) {
+    sessionOpts.sessionKey = opts.sessionKey;
   }
 
   return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;
@@ -552,7 +588,7 @@ function navigationSignals(value: {
   return signals;
 }
 
-async function hostForTab(
+async function urlForTab(
   chromeApi: ChromeLike | undefined,
   tabId: number,
 ): Promise<string | undefined> {
@@ -563,12 +599,12 @@ async function hostForTab(
   return new Promise((resolve) => {
     try {
       const result = chromeApi.tabs?.get?.(tabId, (tab) => {
-        resolve(hostFromUrl(tab?.url ?? tab?.pendingUrl));
+        resolve(tab?.url ?? tab?.pendingUrl);
       });
 
       if (isPromiseLike(result)) {
         result.then(
-          (tab) => resolve(hostFromUrl(tab?.url ?? tab?.pendingUrl)),
+          (tab) => resolve(tab?.url ?? tab?.pendingUrl),
           () => resolve(undefined),
         );
       }
@@ -594,18 +630,6 @@ function isShouldStandDownMessage(
     message !== null &&
     (message as { type?: unknown }).type === QUERY_MESSAGE_TYPE
   );
-}
-
-function hostFromUrl(value: string | undefined): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  try {
-    return new URL(value).hostname.toLowerCase().replace(/\.$/, '');
-  } catch {
-    return undefined;
-  }
 }
 
 function failClosedDecision(reason: string): Decision {

@@ -108,8 +108,10 @@ class StanddownSession {
   constructor(store: StateStore, opts?: {
     auditLog?: boolean
     selfExemptionScope?: 'policy' | 'session'
+    sessionKey?: (url: string) => string | undefined        // state bucket; defaults to the landing hostname
   })
   async ingest(signals: Signals, policies: StanddownPolicy[]): Promise<Decision>
+  resolveSessionKey(url: string): string | undefined              // the key ingest files state under
   async shouldStandDown(advertiserHost: string, now: number): Promise<Decision>
   async recordActivity(now: number): Promise<void>               // feeds inactivity windows
   async exportAuditLog(): Promise<AuditEntry[]>

@@ -12,6 +12,7 @@ import {
   type FetchLike,
   type RuntimeMessageSenderLike,
   type StanddownMessageResponse,
+  type TabLike,
   type WebNavigationCommittedDetails,
   type WebRequestBeforeDetails,
 } from '../src/webext';
@@ -418,6 +419,119 @@ describe('webext adapter', () => {
     controller.dispose();
   });
 
+  it('reads tabs and URLs through a configured sessionKey resolver', async () => {
+    const chrome = fakeChrome({ webRequest: false });
+    const controller = createStanddown({
+      policies: [cjPolicy],
+      chrome,
+      now: () => 9_000,
+      // Collapse a merchant's hosts onto one advertiser key.
+      sessionKey: (url) =>
+        new URL(url).hostname.endsWith('merchant.example')
+          ? 'merchant.example'
+          : undefined,
+    });
+
+    chrome.webNavigation?.onCommitted?.emit({
+      tabId: 12,
+      frameId: 0,
+      url: 'https://www.merchant.example/?cjevent=abc',
+    });
+    await flushPromises();
+
+    // The tab read finds the bucket the navigation was filed under, not the
+    // www host it landed on.
+    await expect(controller.shouldStandDown(12, 9_001)).resolves.toMatchObject({
+      standDown: true,
+      policyId: 'cj',
+    });
+    // So does a URL read for a sibling host that never navigated itself.
+    await expect(
+      controller.shouldStandDownForUrl(
+        'https://checkout.merchant.example/pay',
+        9_002,
+      ),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+
+    controller.dispose();
+  });
+
+  it('reads a tab it never saw navigate through the tab URL', async () => {
+    const chrome = fakeChrome({
+      webRequest: false,
+      tabUrls: new Map([[21, 'https://merchant.example/cart']]),
+    });
+    const controller = createStanddown({
+      policies: [cjPolicy],
+      chrome,
+      now: () => 10_000,
+    });
+
+    // Tab 30 lands on the merchant and files an active stand-down.
+    chrome.webNavigation?.onCommitted?.emit({
+      tabId: 30,
+      frameId: 0,
+      url: 'https://merchant.example/?cjevent=abc',
+    });
+    await flushPromises();
+
+    // Tab 21 has no cached key, so the read falls back to chrome.tabs.get and
+    // resolves the URL that tab is currently on.
+    await expect(controller.shouldStandDown(21, 10_001)).resolves.toMatchObject({
+      standDown: true,
+      policyId: 'cj',
+    });
+
+    controller.dispose();
+  });
+
+  it('drops a cached tab key when a navigation resolves to no key', async () => {
+    const tabUrls = new Map([[12, 'https://www.merchant.example/']]);
+    const chrome = fakeChrome({ webRequest: false, tabUrls });
+    const controller = createStanddown({
+      policies: [cjPolicy],
+      chrome,
+      now: () => 12_000,
+      sessionKey: (url) =>
+        new URL(url).hostname.endsWith('merchant.example')
+          ? 'merchant.example'
+          : undefined,
+    });
+
+    // A first navigation caches the bucket it filed state under. Nothing is
+    // standing down in it.
+    chrome.webNavigation?.onCommitted?.emit({
+      tabId: 12,
+      frameId: 0,
+      url: 'https://www.merchant.example/',
+    });
+    await flushPromises();
+    await expect(controller.shouldStandDown(12, 12_001)).resolves.toMatchObject({
+      standDown: false,
+      reason: 'no-active-standdown',
+    });
+
+    // The next navigation in the same tab is unparseable, so the resolver
+    // throws and ingest fails it closed.
+    tabUrls.set(12, 'not a url');
+    chrome.webNavigation?.onCommitted?.emit({
+      tabId: 12,
+      frameId: 0,
+      url: 'not a url',
+    });
+    await flushPromises();
+
+    // The stale key must not answer for it — that would report the previous
+    // page's bucket for a navigation that just failed closed. The read
+    // re-resolves and fails closed too.
+    await expect(controller.shouldStandDown(12, 12_002)).resolves.toMatchObject({
+      standDown: true,
+      reason: 'missing-tab-url',
+    });
+
+    controller.dispose();
+  });
+
   it('applies verified refresh bundles outside the decision path', async () => {
     const keyPair = await createSigningKeyPair();
     const updatedPolicy = additivePolicy(cjPolicy);
@@ -507,6 +621,8 @@ function fakeChrome(opts: {
   storageSession?: boolean;
   local?: FakeChromeStorageArea;
   session?: FakeChromeStorageArea;
+  /** Present ⇒ chrome.tabs.get exists and answers from this map. */
+  tabUrls?: Map<number, string>;
 }): ChromeLike & {
   webRequest?: { onBeforeRequest: FakeEvent<[WebRequestBeforeDetails]> };
   webNavigation?: { onCommitted: FakeEvent<[WebNavigationCommittedDetails]> };
@@ -523,6 +639,23 @@ function fakeChrome(opts: {
 } {
   const includeWebNavigation = opts.webNavigation ?? true;
   const includeStorageSession = opts.storageSession ?? true;
+  const tabUrls = opts.tabUrls;
+  const tabs: {
+    onRemoved: FakeEvent<[number]>;
+    get?: (
+      tabId: number,
+      callback?: (tab: TabLike | undefined) => void,
+    ) => undefined;
+  } = { onRemoved: new FakeEvent<[number]>() };
+
+  if (tabUrls !== undefined) {
+    tabs.get = (tabId, callback) => {
+      const url = tabUrls.get(tabId);
+      callback?.(url === undefined ? undefined : { id: tabId, url });
+      return undefined;
+    };
+  }
+
   const chrome = {
     runtime: {
       onMessage: new FakeMessageEvent(),
@@ -530,9 +663,7 @@ function fakeChrome(opts: {
     storage: {
       local: opts.local ?? new FakeChromeStorageArea(),
     },
-    tabs: {
-      onRemoved: new FakeEvent<[number]>(),
-    },
+    tabs,
   };
   const withWebNavigation = includeWebNavigation
     ? {

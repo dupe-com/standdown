@@ -34,6 +34,7 @@ export class StanddownSession {
   readonly #maxAuditEntries: number;
   readonly #selfExemptionScope: 'policy' | 'session';
   readonly #sessionExemptionTtlMs: number;
+  readonly #sessionKey: ((url: string) => string | undefined) | undefined;
   readonly #readOnlyAuditLog: AuditEntry[] = [];
   #stateLock: Promise<unknown> = Promise.resolve();
 
@@ -58,6 +59,32 @@ export class StanddownSession {
        * expiry and hold the exemption for the lifetime of the session state.
        */
       sessionExemptionTtlMs?: number;
+      /**
+       * Resolves the key a navigation's stand-down state is filed under.
+       * Defaults to the landing hostname, which keeps every host separate.
+       * Return a stable advertiser key to share one session across a
+       * merchant's hosts — `www`, checkout subdomains, alternate ccTLDs.
+       * Returning `undefined` or an empty string falls back to the landing
+       * hostname. The key is normalized (lower-cased, trailing dot stripped)
+       * before use, and a resolver that throws fails the navigation closed.
+       * It must be deterministic: the same URL must always produce the same
+       * key, or a read resolves a different bucket than the write filed.
+       *
+       * Detection is unaffected: policy `advertiserHosts` rules and referrer
+       * classification always see the real hostname.
+       *
+       * `shouldStandDown` does not call this resolver — it looks up state by
+       * whatever string it is given. Pass it
+       * {@link StanddownSession.resolveSessionKey}'s result rather than the raw
+       * landing hostname, or the lookup misses the bucket and silently returns
+       * `no-active-standdown`.
+       *
+       * Scope this narrowly. A key groups both stand-down sessions *and*
+       * self-exemptions. Widening it widens suppression (safe), but it also
+       * widens any self-exemption granted under it (not safe) — so return a
+       * key no broader than the advertiser whose attribution you control.
+       */
+      sessionKey?: (url: string) => string | undefined;
     },
   ) {
     this.#store = store;
@@ -65,6 +92,7 @@ export class StanddownSession {
     this.#maxAuditEntries = Math.max(0, opts?.maxAuditEntries ?? 1_000);
     this.#selfExemptionScope = opts?.selfExemptionScope ?? 'policy';
     this.#sessionExemptionTtlMs = opts?.sessionExemptionTtlMs ?? 1_800_000;
+    this.#sessionKey = opts?.sessionKey;
   }
 
   async ingest(
@@ -72,6 +100,24 @@ export class StanddownSession {
     policies: readonly StanddownPolicy[],
   ): Promise<Decision> {
     const advertiserHost = hostFromUrl(signals.url);
+
+    let resolvedKey: string | undefined;
+
+    try {
+      resolvedKey = this.#sessionKey?.(signals.url);
+    } catch (error) {
+      return this.#failClosedWithAudit(
+        signals.now,
+        'ingest',
+        advertiserHost,
+        `session-key-error: ${messageFromError(error)}`,
+      );
+    }
+
+    // Normalize what the resolver returns: the write paths key state by
+    // normalizeHost, so an un-normalized key would file state under one string
+    // and read it back under another. An empty string is not a key.
+    const stateKey = resolvedKey ? normalizeHost(resolvedKey) : advertiserHost;
 
     try {
       validatePolicies(policies);
@@ -101,18 +147,27 @@ export class StanddownSession {
 
       let effective = detection;
 
-      if (this.#selfExemptionScope === 'session' && advertiserHost) {
+      if (this.#selfExemptionScope === 'session' && stateKey && advertiserHost) {
         recordSessionExemptions(
           state,
+          stateKey,
           advertiserHost,
           detection,
           signals.now,
           this.#sessionExemptionTtlMs,
         );
+        // The record is looked up by the bucket key, but the first argument is
+        // the real detected host: applySessionExemptions compares it against
+        // each match's advertiserHost, which detect() always sets to the actual
+        // landing hostname. Both sides were the same host before this option
+        // existed, so that comparison never filtered anything; handing it the
+        // bucket key instead would make it differ for every match and silently
+        // stop exemptions from suppressing anything whenever a resolver
+        // collapses hosts.
         effective = applySessionExemptions(
           advertiserHost,
           detection,
-          state.exemptions?.[advertiserHost],
+          state.exemptions?.[stateKey],
         );
       }
 
@@ -128,6 +183,7 @@ export class StanddownSession {
 
         const record = upsertSessionRecord(
           state,
+          stateKey ?? effective.strongest.advertiserHost,
           effective.strongest.advertiserHost,
           effective.strongest.policyId,
           matchedPolicies,
@@ -143,8 +199,8 @@ export class StanddownSession {
         };
       }
 
-      const activeDecision = advertiserHost
-        ? activeDecisionForHost(state, advertiserHost, signals.now)
+      const activeDecision = stateKey
+        ? activeDecisionForHost(state, stateKey, signals.now)
         : undefined;
 
       // A session exemption filtered out what would otherwise have stood down.
@@ -170,6 +226,28 @@ export class StanddownSession {
         detection: effective,
       };
     }, 'ingest');
+  }
+
+  /**
+   * The state key `ingest` files this navigation under: the `sessionKey`
+   * resolver's value, normalized, or the landing hostname when no resolver is
+   * configured or it returns `undefined`/an empty string.
+   *
+   * Feed it to {@link StanddownSession.shouldStandDown}, which never runs the
+   * resolver itself. `undefined` means no key could be resolved — an
+   * unparseable URL, or a resolver that threw. `ingest` fails closed in both
+   * cases, so treat it as "stand down", not as "nothing to look up".
+   */
+  resolveSessionKey(url: string): string | undefined {
+    let resolvedKey: string | undefined;
+
+    try {
+      resolvedKey = this.#sessionKey?.(url);
+    } catch {
+      return undefined;
+    }
+
+    return resolvedKey ? normalizeHost(resolvedKey) : hostFromUrl(url);
   }
 
   async shouldStandDown(
@@ -379,12 +457,13 @@ function trimAuditLog(
 
 function upsertSessionRecord(
   state: StanddownState,
+  stateKey: string,
   advertiserHost: string,
   primaryPolicyId: string,
   policies: readonly StanddownPolicy[],
   now: number,
 ): SessionRecord {
-  const key = normalizeHost(advertiserHost);
+  const key = normalizeHost(stateKey);
   const existing = state.sessions[key];
   const startedAt = existing?.startedAt ?? now;
   const lastActivityAt = now;
@@ -394,7 +473,7 @@ function upsertSessionRecord(
       ? 'session-or-min'
       : 'inactivity-window';
   const baseRecord: SessionRecord = {
-    advertiserHost: key,
+    advertiserHost: normalizeHost(advertiserHost),
     policyId: primaryPolicyId,
     startedAt,
     lastActivityAt,
@@ -436,13 +515,17 @@ function upsertSessionRecord(
 }
 
 /**
- * Persist scoped self-exemptions seen on this navigation for the host, so later
- * param-less navigations re-apply them. Monotone: never grant an exemption while
- * a stand-down is already active for the host (that would reduce existing
+ * Persist scoped self-exemptions seen on this navigation under its state key, so
+ * later param-less navigations re-apply them. Monotone: never grant an exemption
+ * while a stand-down is already active for that key (that would reduce existing
  * suppression, which a self-exemption may never do).
+ *
+ * Keyed by `stateKey` like {@link upsertSessionRecord}; `advertiserHost` is the
+ * real detected hostname the record carries.
  */
 function recordSessionExemptions(
   state: StanddownState,
+  stateKey: string,
   advertiserHost: string,
   detection: Detection,
   now: number,
@@ -454,11 +537,11 @@ function recordSessionExemptions(
     return;
   }
 
-  if (activeDecisionForHost(state, advertiserHost, now) !== undefined) {
+  if (activeDecisionForHost(state, stateKey, now) !== undefined) {
     return;
   }
 
-  const key = normalizeHost(advertiserHost);
+  const key = normalizeHost(stateKey);
 
   if (state.exemptions === undefined) {
     state.exemptions = {};
@@ -476,7 +559,7 @@ function recordSessionExemptions(
 
   const grantedAt = existing?.grantedAt ?? now;
   const record: ExemptionRecord = {
-    advertiserHost: key,
+    advertiserHost: normalizeHost(advertiserHost),
     policyIds: [...policyIds],
     networkIds: [...networkIds],
     grantedAt,

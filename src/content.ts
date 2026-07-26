@@ -58,6 +58,14 @@ export interface CreateContentStanddownOptions {
    * disables expiry (lifetime of the session state).
    */
   readonly sessionExemptionTtlMs?: number;
+  /**
+   * Resolves the key a navigation's stand-down state is filed under. Defaults
+   * to the landing hostname; return a stable advertiser key to share one
+   * session across a merchant's hosts. See `StanddownSession`'s `sessionKey`
+   * for the scoping rules. `shouldStandDown()` resolves the current location
+   * through it too, so an argument-less read stays on the same bucket.
+   */
+  readonly sessionKey?: (url: string) => string | undefined;
   readonly onDecision?: (decision: Decision, signals: Signals) => void;
 }
 
@@ -189,15 +197,20 @@ export function createContentStanddown(
     advertiserHost?: string,
     at = now(),
   ): Promise<Decision> {
-    const host =
+    // An explicit argument is used as given — it is the caller's own key. With
+    // none, resolve the current location through the session so a configured
+    // sessionKey reads the bucket evaluate() wrote, not the raw hostname.
+    const key =
       advertiserHost ??
-      (windowLike === undefined ? undefined : hostFromUrl(windowLike.location.href));
+      (windowLike === undefined
+        ? undefined
+        : session.resolveSessionKey(windowLike.location.href));
 
-    if (host === undefined) {
+    if (key === undefined) {
       return failClosedDecision('missing-advertiser-host');
     }
 
-    return session.shouldStandDown(host, at);
+    return session.shouldStandDown(key, at);
   }
 
   function dispose(): void {
@@ -277,12 +290,14 @@ function contentSessionOptions(
       auditLog?: boolean;
       selfExemptionScope?: 'policy' | 'session';
       sessionExemptionTtlMs?: number;
+      sessionKey?: (url: string) => string | undefined;
     }
   | undefined {
   const sessionOpts: {
     auditLog?: boolean;
     selfExemptionScope?: 'policy' | 'session';
     sessionExemptionTtlMs?: number;
+    sessionKey?: (url: string) => string | undefined;
   } = {};
 
   if (opts.auditLog !== undefined) {
@@ -295,6 +310,10 @@ function contentSessionOptions(
 
   if (opts.sessionExemptionTtlMs !== undefined) {
     sessionOpts.sessionExemptionTtlMs = opts.sessionExemptionTtlMs;
+  }
+
+  if (opts.sessionKey !== undefined) {
+    sessionOpts.sessionKey = opts.sessionKey;
   }
 
   return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;
@@ -372,14 +391,6 @@ function currentWindow(): ContentWindowLike | undefined {
   }).window;
 
   return value;
-}
-
-function hostFromUrl(value: string): string | undefined {
-  try {
-    return new URL(value).hostname.toLowerCase().replace(/\.$/, '');
-  } catch {
-    return undefined;
-  }
 }
 
 function failClosedDecision(reason: string): Decision {
