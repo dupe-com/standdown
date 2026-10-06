@@ -14,6 +14,7 @@ import {
   cjPolicy,
   ebayEpnPolicy,
   impactPolicy,
+  partnerizePolicy,
   rakutenPolicy,
 } from '../src/policies';
 
@@ -327,6 +328,87 @@ describe('detect', () => {
 
     expect(detection.selfMatch).toBe(true);
     expect(detection.matched.map((match) => match.policyId)).toEqual(['cj']);
+  });
+
+  it('matches landing param names case-insensitively', () => {
+    const cases: readonly [string, StanddownPolicy][] = [
+      ['clickRef=abc', partnerizePolicy],
+      ['CJEVENT=abc', cjPolicy],
+      ['ransiteID=abc', rakutenPolicy],
+      ['ranSiteId=abc', rakutenPolicy],
+      ['Irclickid=abc', impactPolicy],
+    ];
+
+    for (const [query, policy] of cases) {
+      const detection = detect(
+        { ...DEFAULT_SIGNALS, url: `https://merchant.example/?${query}` },
+        [policy],
+      );
+
+      expect(
+        detection.matched.some(
+          (match) => match.policyId === policy.id && match.kind === 'landing-param',
+        ),
+        `${policy.id} should match ${query}`,
+      ).toBe(true);
+    }
+  });
+
+  it('matches every bundled landing-param group with upper-cased names', () => {
+    for (const policy of bundledPolicies) {
+      for (const rule of policy.detection.landingParams ?? []) {
+        for (const group of rule.anyOf) {
+          const url = new URL(urlForPolicy(policy));
+
+          for (const matcher of group.allOf) {
+            url.searchParams.set(matcher.name.toUpperCase(), valueForMatcher(matcher));
+          }
+
+          expect(
+            detect({ ...DEFAULT_SIGNALS, url: url.href }, [policy]).matched.some(
+              (match) =>
+                match.policyId === policy.id && match.kind === 'landing-param',
+            ),
+            `${policy.id} should match upper-cased ${JSON.stringify(group)}`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('keeps landing param values exact when names are folded', () => {
+    const matches = (query: string) =>
+      detect({ ...DEFAULT_SIGNALS, url: `https://merchant.example/?${query}` }, [
+        cjPolicy,
+      ]).matched.some((match) => match.kind === 'landing-param');
+
+    expect(matches('afsrc=1')).toBe(true);
+    expect(matches('AFSRC=1')).toBe(true);
+    expect(matches('afsrc=TRUE')).toBe(false);
+    expect(matches('utm_source=CJ')).toBe(false);
+  });
+
+  it('keeps self-exemption param names exact', () => {
+    const selfPatterns = [
+      { name: 'PID', value: 'CJ0000000', match: 'equals', networkId: 'cj' },
+    ] as const;
+    const detectWith = (query: string) =>
+      detect(
+        {
+          ...DEFAULT_SIGNALS,
+          url: `https://merchant.example/?cjevent=abc&${query}`,
+          selfPatterns,
+        },
+        [cjPolicy],
+      );
+
+    const exact = detectWith('PID=CJ0000000');
+    expect(exact.selfMatch).toBe(true);
+    expect(exact.matched).toHaveLength(0);
+
+    const lowercase = detectWith('pid=CJ0000000');
+    expect(lowercase.selfMatch).toBe(false);
+    expect(lowercase.matched.map((match) => match.policyId)).toEqual(['cj']);
   });
 
   it('returns a fail-closed reason for malformed signal URLs', () => {

@@ -83,7 +83,7 @@ new logic. Map each inventory row to exactly one library concept.
 
 | Homegrown construct | `standdown` concept | Notes |
 | --- | --- | --- |
-| Affiliate params that trigger stand-down (`cjevent`, `ranSiteID`, …) | `detection.landingParams` | Grouped `anyOf` / `allOf`; `{ name }` alone = presence, add `value` + `match:'equals'` for value checks. |
+| Affiliate params that trigger stand-down (`cjevent`, `ranSiteID`, …) | `detection.landingParams` | Grouped `anyOf` / `allOf`; `{ name }` alone = presence, add `value` + `match:'equals'` for value checks. Names match case-insensitively (`CJEVENT` hits `cjevent`), so drop per-casing duplicates; values stay exact. |
 | Network redirect/rotator hostnames (`linksynergy`, `anrdoezrs`) | `detection.redirectDomains` | `{ pattern, kind:'suffix' }`. Observed only by the webext adapter's `webRequest` plane. |
 | Cookie checks | `detection.cookiePatterns` | **NAME-ONLY.** `{ name, match:'exact'\|'substring' }`. Values are never inspected — see the divergence note below. |
 | Your **own** attribution params (`ignore_param`) | `selfPatterns` (+ `selfExemptionScope`) | `{ name, value?, match?, networkId? \| policyId? }` — scope by either `networkId` (whole network) or `policyId` (one pack). Two axes: **duration** (`selfExemptionScope`) and **breadth** (which networks it clears). A *global* `ignore_param` that clears any network → `expandSelfExemption(matcher, policies)`, which emits one `policyId`-scoped entry per policy. The highest-risk mapping. |

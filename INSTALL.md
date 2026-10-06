@@ -223,7 +223,10 @@ const guard = guardActivation({
 
 `selfPatterns` declare the params that are *your own* attribution — when one
 matches, the library does not stand down against that network (it's your click,
-not a competitor's). By default this exemption lasts only for the navigation that
+not a competitor's). `selfPatterns` names match **exactly** (case-sensitive),
+unlike policy landing params, which match names case-insensitively — so a
+differently-cased param never widens your exemption. Declare the casing your
+links actually carry. By default this exemption lasts only for the navigation that
 carries the param (`selfExemptionScope: 'policy'`). Merchants often strip the
 param on later internal navigations while your attribution (a first-party cookie,
 say) lingers — under policy scope that lingering signal would then read as a

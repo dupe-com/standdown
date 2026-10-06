@@ -179,8 +179,10 @@ function collectPolicyMatches(
     );
 
   if (advertiserHostMatches) {
+    const landingParams = caseInsensitiveParams(currentUrl.searchParams);
+
     for (const rule of policy.detection.landingParams ?? []) {
-      if (paramRuleMatches(rule, currentUrl.searchParams)) {
+      if (paramRuleMatches(rule, landingParams)) {
         matches.push(
           matchedRule(
             policy,
@@ -282,7 +284,36 @@ function kindPriority(kind: MatchedRule['kind']): number {
   return 4;
 }
 
-function paramRuleMatches(rule: ParamRule, params: URLSearchParams): boolean {
+type ParamValues = (name: string) => readonly string[];
+
+/**
+ * Landing-param lookup keyed by lowercased name: real landings carry the same
+ * attribution param in mixed casings (`clickRef`, `CJEVENT`, `ranSiteId`).
+ * Only names are folded; values still compare exactly. Self-exemptions do not
+ * use this lookup, so loosening detection can never widen an exemption.
+ */
+function caseInsensitiveParams(params: URLSearchParams): ParamValues {
+  const byName = new Map<string, string[]>();
+
+  for (const [name, value] of params) {
+    const key = name.toLowerCase();
+    const values = byName.get(key);
+
+    if (values === undefined) {
+      byName.set(key, [value]);
+    } else {
+      values.push(value);
+    }
+  }
+
+  return (name) => byName.get(name.toLowerCase()) ?? [];
+}
+
+function exactParams(params: URLSearchParams): ParamValues {
+  return (name) => params.getAll(name);
+}
+
+function paramRuleMatches(rule: ParamRule, params: ParamValues): boolean {
   return rule.anyOf.some((group) =>
     group.allOf.every((matcher) => paramMatcherMatches(matcher, params)),
   );
@@ -290,9 +321,9 @@ function paramRuleMatches(rule: ParamRule, params: URLSearchParams): boolean {
 
 function paramMatcherMatches(
   matcher: ParamMatcher,
-  params: URLSearchParams,
+  params: ParamValues,
 ): boolean {
-  const values = params.getAll(matcher.name);
+  const values = params(matcher.name);
   const mode = matcher.match ?? (matcher.value === undefined ? 'exists' : 'equals');
 
   if (mode === 'exists') {
@@ -342,7 +373,7 @@ function hasScopedSelfExemption(
 
     return (
       (scopedToPolicy || scopedToNetwork) &&
-      paramMatcherMatches(pattern, currentUrl.searchParams)
+      paramMatcherMatches(pattern, exactParams(currentUrl.searchParams))
     );
   });
 }
@@ -355,7 +386,7 @@ function hasUnscopedSelfExemption(
     (pattern) =>
       pattern.policyId === undefined &&
       pattern.networkId === undefined &&
-      paramMatcherMatches(pattern, currentUrl.searchParams),
+      paramMatcherMatches(pattern, exactParams(currentUrl.searchParams)),
   );
 }
 
