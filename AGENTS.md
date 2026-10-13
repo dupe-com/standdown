@@ -160,6 +160,9 @@ with the exact `esbuild` bundle command:
   (background worker + popup).
 - **content adapter** → [`examples/content-extension`](./examples/content-extension)
   (a content script that gates on `decision.standDown` alone).
+- **relay adapter** → [`examples/relay-extension`](./examples/relay-extension)
+  (a `document_start` capture plus a background decision, with a real-browser
+  check in `e2e/run.mjs`).
 
 Mirror whichever matches your adapter, then load the bundled output unpacked and
 click through a partner flow to confirm you go quiet when attribution already
