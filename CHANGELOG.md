@@ -2,7 +2,28 @@
 
 ## Unreleased (minor)
 
-New opt-in entry point. Nothing changes for hosts that don't use it.
+New opt-in `standdown/relay` entry point and `selfClickLift`, plus a few default
+changes listed under *Upgrading from 0.3.x*.
+
+### Upgrading from 0.3.x
+
+No exports were removed, and code written for 0.3.3 still type-checks (its own
+test suite compiles unchanged). What existing users will notice:
+
+- **CJ stands down correctly: on the referral, not on its cookie.** A CJ landing
+  param, redirect domain or `afsrc=1` stands down as before; the `cje` /
+  `cjevent_dc` cookie alone no longer does, since it lasts 13 months and can't
+  tell this visit's referral from an old one.
+- **Landing param names match in any casing** (`CJEVENT`, `CjEvent`), so you may
+  stand down on landings you used to miss.
+- **A `session-or-min` stand-down survives a browser restart for its minimum
+  counted from the latest referral**, not the first.
+- **A session self-exemption now expires after a reload** too (it never did with
+  a persistent store).
+- Saved state gains optional fields (`policyIds`, `lastReferralAt`,
+  `disabledHost`). 0.3.3 ignores them, so rolling back keeps working.
+- With a signed policy refresh, a served bundle that still carries CJ's cookie
+  rules is accepted and brings them back for that host.
 
 ### Added
 
@@ -43,8 +64,16 @@ New opt-in entry point. Nothing changes for hosts that don't use it.
   never lifted. The relay capture reports own clicks as policy ids only (no
   values) when its own `selfClickLift` is on.
 
+- `sessionKey?: (url) => string | undefined` on `StanddownSession` and the
+  adapters, plus `StanddownSession.resolveSessionKey()`: share one session across
+  a merchant's hosts (`www.`, `checkout.`, alternate ccTLDs). Defaults to the
+  landing hostname. (#60)
+
 ### Changed
 
+- **Landing param names match case-insensitively** (`cjevent`, `CJEVENT`,
+  `CjEvent`); values and own-click `selfPatterns` stay exact. `lintPolicies` warns
+  on a landing name listed in two casings. (#62)
 - **`cjPolicy` no longer stands down on the `cje` / `cjevent_dc` cookies**
   (policy version 0.2.0). CJ's software policy names only CJ domains, `afsrc=1`
   and `cjevent` as evidence of a prior referral, and CJ's `cje` cookie lasts 13
@@ -57,6 +86,9 @@ New opt-in entry point. Nothing changes for hosts that don't use it.
 
 ### Fixed
 
+- A session self-exemption's `expiresAt` now survives a persisted reload, so its
+  TTL is enforced with `SessionStorageStateStore` and the persisted-envelope
+  stores. (#59)
 - `POLICIES.md` listed CJ's minimum as 30 minutes; the policy has always used 60.
 - A `session-or-min` stand-down's minimum (CJ: 60 minutes) now counts from the
   **latest** referral rather than the first, when a persistent store carries it
