@@ -30,7 +30,11 @@ checks passed.
 - **Return visits on a later day.** The relay remembers a landing for one tab
   (up to 30 minutes) and the engine remembers a stand-down for the browsing
   session. Neither reaches a visit after the browser restarts. The relay does not
-  read cookies; a host that wants cookie evidence can also run `content`.
+  read cookies. CJ's first-party `cje` cookie is not a good substitute: CJ's
+  [server-side cookie spec](https://docs.cj.com/docs/http-cookie) sets it for
+  13 months from the last update, kept on visits without a new click, and the
+  library matches cookie names only, so its presence can't tell a click from
+  yesterday from one a year ago.
 - **Server-side redirect hops** and `#` fragment params (documented limits).
 - **Real shop sites and Safari.** These pages are local stand-ins built to
   reproduce the stripping patterns.
