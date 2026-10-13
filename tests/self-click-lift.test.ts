@@ -13,13 +13,53 @@ const shop = 'https://merchant.example';
 const lifting = () =>
   new StanddownSession(new MemoryStateStore(), { selfClickLift: 'same-network' });
 
+describe('selfClickLift: when the own click happened', () => {
+  it("re-checking a URL that still carries our param is not a new click: a newer competitor keeps the stand-down", async () => {
+    const session = lifting();
+    // Our real click lands at 1s (selfClickAt), and lifts nothing (no stand-down yet).
+    await session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, policies);
+    // A competitor's CJ click at 2s.
+    await session.ingest({ url: `${shop}/?cjevent=abc`, now: 2_000 }, policies);
+
+    // Reload / Back / SPA re-check of our old URL at 3s: no selfClickAt.
+    await expect(
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 3_000, selfPatterns: ownCj }, policies),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+    // Same document re-checked with its original landing time: still older than the competitor.
+    await expect(
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 3_000, selfPatterns: ownCj, selfClickAt: 1_000 }, policies),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+  });
+
+  it('without selfClickAt, an own click exempts but never lifts', async () => {
+    const session = lifting();
+    await session.ingest({ url: `${shop}/?cjevent=abc`, now: 0 }, policies);
+
+    await expect(
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, policies),
+    ).resolves.toMatchObject({ standDown: true });
+  });
+
+  it('a selfClickAt in the future is clamped to now', async () => {
+    const session = lifting();
+    await session.ingest({ url: `${shop}/?cjevent=abc`, now: 5_000 }, policies);
+
+    await expect(
+      session.ingest(
+        { url: `${shop}/?cjevent=own`, now: 4_000, selfPatterns: ownCj, selfClickAt: 9_999_999 },
+        policies,
+      ),
+    ).resolves.toMatchObject({ standDown: true });
+  });
+});
+
 describe('selfClickLift', () => {
   it('is off by default: an own click never lifts an active stand-down', async () => {
     const session = new StanddownSession(new MemoryStateStore());
     await session.ingest({ url: `${shop}/?cjevent=abc`, now: 0 }, policies);
 
     await expect(
-      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, policies),
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, policies),
     ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
   });
 
@@ -28,7 +68,7 @@ describe('selfClickLift', () => {
     await session.ingest({ url: `${shop}/?cjevent=abc`, now: 0 }, policies);
 
     await expect(
-      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, policies),
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, policies),
     ).resolves.toMatchObject({ standDown: false, reason: 'self-click-lifted' });
 
     // Stays lifted on later param-less pages.
@@ -40,7 +80,7 @@ describe('selfClickLift', () => {
   it('a competitor referral after the lift stands down again', async () => {
     const session = lifting();
     await session.ingest({ url: `${shop}/?cjevent=abc`, now: 0 }, policies);
-    await session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, policies);
+    await session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, policies);
 
     await expect(
       session.ingest({ url: `${shop}/?cjevent=xyz`, now: 2_000, selfPatterns: ownCj }, policies),
@@ -52,7 +92,7 @@ describe('selfClickLift', () => {
     await session.ingest({ url: `${shop}/?irclickid=abc`, now: 0 }, policies);
 
     await expect(
-      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, policies),
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, policies),
     ).resolves.toMatchObject({ standDown: true, policyId: 'impact' });
   });
 
@@ -62,7 +102,7 @@ describe('selfClickLift', () => {
     await session.ingest({ url: `${shop}/?irclickid=abc`, now: 500 }, policies);
 
     await expect(
-      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, policies),
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, policies),
     ).resolves.toMatchObject({ standDown: true });
   });
 
@@ -72,7 +112,7 @@ describe('selfClickLift', () => {
     await session.ingest({ url: `${shop}/?cjevent=abc`, now: 500 }, policies);
 
     await expect(
-      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, policies),
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, policies),
     ).resolves.toMatchObject({ standDown: true });
   });
 
@@ -94,7 +134,7 @@ describe('selfClickLift', () => {
     const session = new StanddownSession(store, { selfClickLift: 'same-network' });
 
     await expect(
-      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, policies),
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, policies),
     ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
   });
 
@@ -118,7 +158,7 @@ describe('selfClickLift', () => {
     await session.ingest({ url: `${shop}/?cjevent=abc`, now: 500 }, policies);
 
     await expect(
-      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, policies),
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, policies),
     ).resolves.toMatchObject({ standDown: true });
   });
 
@@ -133,7 +173,7 @@ describe('selfClickLift', () => {
     await session.ingest({ url: `${shop}/?ranSiteID=abc`, now: 0 }, policies);
 
     await expect(
-      session.ingest({ url: `${shop}/?ranSiteID=own`, now: 1_000, selfPatterns: ownRakuten }, policies),
+      session.ingest({ url: `${shop}/?ranSiteID=own`, now: 1_000, selfPatterns: ownRakuten, selfClickAt: 1_000 }, policies),
     ).resolves.toMatchObject({ standDown: false, reason: 'self-click-lifted' });
 
     // Next page: the lsclick_mid cookie is ours now. It must not stand us down.
@@ -155,7 +195,7 @@ describe('selfClickLift', () => {
 
     await expect(
       session.ingest(
-        { url: 'https://checkout.merchant.example/?cjevent=own', now: 1_000, selfPatterns: ownCj },
+        { url: 'https://checkout.merchant.example/?cjevent=own', now: 1_000, selfClickAt: 1_000, selfPatterns: ownCj },
         policies,
       ),
     ).resolves.toMatchObject({ standDown: false, reason: 'self-click-lifted' });
@@ -183,7 +223,7 @@ describe('selfClickLift', () => {
 
     await expect(
       session.ingest(
-        { url: `${shop}/?cjevent=own&irclickid=abc`, now: 1_000, selfPatterns: ownCj },
+        { url: `${shop}/?cjevent=own&irclickid=abc`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 },
         policies,
       ),
     ).resolves.toMatchObject({ standDown: true, policyId: 'impact' });
@@ -232,7 +272,7 @@ describe('selfClickLift', () => {
     const session = lifting();
 
     await expect(
-      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, [blocked]),
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, [blocked]),
     ).resolves.toMatchObject({ standDown: true });
   });
 
@@ -261,7 +301,7 @@ describe('selfClickLift', () => {
 
     // Reloaded from storage: still two contributors, so a CJ own click can't lift it.
     await expect(
-      at(1_000).ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, policies),
+      at(1_000).ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, policies),
     ).resolves.toMatchObject({ standDown: true });
   });
 });

@@ -165,6 +165,7 @@ export class StanddownSession {
       // else matched this navigation: a competing signal blocks the lift.
       const lifted =
         this.#selfClickLift === 'same-network' &&
+        signals.selfClickAt !== undefined &&
         advertiserHost !== undefined &&
         stateKey !== undefined &&
         detection.strongest === undefined &&
@@ -174,7 +175,7 @@ export class StanddownSession {
           advertiserHost,
           detection.selfExemptScopes ?? [],
           policies,
-          signals.now,
+          Math.min(signals.selfClickAt, signals.now),
         );
 
       let effective = detection;
@@ -220,6 +221,7 @@ export class StanddownSession {
           effective.strongest.policyId,
           matchedPolicies,
           signals.now,
+          effective.matched.some((match) => match.kind === 'disabled-host'),
         );
 
         return {
@@ -553,6 +555,7 @@ function upsertSessionRecord(
   primaryPolicyId: string,
   policies: readonly StanddownPolicy[],
   now: number,
+  viaDisabledHost = false,
 ): SessionRecord {
   const key = normalizeHost(stateKey);
   const existing = state.sessions[key];
@@ -585,6 +588,8 @@ function upsertSessionRecord(
         ...policies.map((policy) => policy.id),
       ]),
     ],
+    lastReferralAt: now,
+    ...(existing?.disabledHost || viaDisabledHost ? { disabledHost: true as const } : {}),
   };
 
   if (sessionRule === 'inactivity-window') {
@@ -813,6 +818,7 @@ function liftSelfClick(
   if (
     !record ||
     scopes.length === 0 ||
+    record.disabledHost === true ||
     record.policyIds === undefined ||
     record.policyIds.includes(UNKNOWN_CONTRIBUTORS)
   ) {
@@ -845,10 +851,16 @@ function liftSelfClick(
   }
 
   const networkOf = new Map(policies.map((policy) => [policy.id, policy.network.id]));
+
+  // A record the universal catch-all fed (afsrc=1, network unknown) can't be
+  // attributed to the own click's network, so it is never lifted.
+  if (record.policyIds.some((id) => networkOf.get(id) === UNIVERSAL_NETWORK_ID)) {
+    return false;
+  }
   const covered = record.policyIds.every((id) =>
     scopes.some((scope) => scope.policyId === id || scope.networkId === networkOf.get(id)),
   );
-  const latestReferral = Math.max(record.startedAt, record.lastActivityAt);
+  const latestReferral = record.lastReferralAt ?? Math.max(record.startedAt, record.lastActivityAt);
 
   if (!covered || latestReferral >= clickAt) {
     return false;
@@ -992,6 +1004,7 @@ function cloneState(state: StanddownState): StanddownState {
         {
           ...record,
           behaviors: [...record.behaviors],
+          ...(record.policyIds ? { policyIds: [...record.policyIds] } : {}),
         },
       ]),
     ),

@@ -431,6 +431,8 @@ function parseSessionRecord(value: unknown): SessionRecord {
     inactivityMs,
     behaviors,
     policyIds,
+    lastReferralAt,
+    disabledHost,
   } = value;
 
   if (
@@ -445,7 +447,9 @@ function parseSessionRecord(value: unknown): SessionRecord {
     !Array.isArray(behaviors) ||
     !behaviors.every(isBehavior) ||
     (policyIds !== undefined &&
-      (!Array.isArray(policyIds) || !policyIds.every((id) => typeof id === 'string')))
+      (!Array.isArray(policyIds) || !policyIds.every((id) => typeof id === 'string'))) ||
+    (lastReferralAt !== undefined && typeof lastReferralAt !== 'number') ||
+    (disabledHost !== undefined && disabledHost !== true)
   ) {
     throw new Error('invalid session record');
   }
@@ -470,6 +474,14 @@ function parseSessionRecord(value: unknown): SessionRecord {
 
   if (policyIds !== undefined) {
     record.policyIds = [...policyIds];
+  }
+
+  if (lastReferralAt !== undefined) {
+    record.lastReferralAt = lastReferralAt;
+  }
+
+  if (disabledHost === true) {
+    record.disabledHost = true;
   }
 
   return record;
@@ -559,6 +571,14 @@ function cloneSessionRecord(record: SessionRecord): SessionRecord {
 
   if (record.policyIds !== undefined) {
     next.policyIds = [...record.policyIds];
+  }
+
+  if (record.lastReferralAt !== undefined) {
+    next.lastReferralAt = record.lastReferralAt;
+  }
+
+  if (record.disabledHost === true) {
+    next.disabledHost = true;
   }
 
   return next;
@@ -669,7 +689,10 @@ export function chromeRemove(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     if (storage.remove === undefined) {
-      resolve();
+      // No remove(): overwrite with null rather than silently keeping the value
+      // (a stale relay record could replay an old referral or own click).
+      const cleared = Object.fromEntries((Array.isArray(keys) ? keys : [keys]).map((key) => [key, null]));
+      chromeSet(storage, cleared, runtime).then(resolve, reject);
       return;
     }
 

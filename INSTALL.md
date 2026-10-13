@@ -409,6 +409,14 @@ It only lifts when it is safe:
 
 Decisions it lifts carry `reason: 'self-click-lifted'` in the audit log.
 
+Only a **fresh navigation** counts as a click. A reload, back/forward or SPA
+re-check of a URL that still carries your param is not a new click (the shopper
+may have clicked a competitor's link since), so it exempts but never lifts. The
+`content`, `webext` and `relay` adapters handle this for you. If you call
+`StanddownSession.ingest()` directly, pass `selfClickAt` (when the click
+landed) for fresh navigations only. `standdown/url` has no navigation events,
+so it doesn't offer the lift.
+
 #### What the shopper sees
 
 Nothing changes for the shopper; this is host configuration. A typical visit:

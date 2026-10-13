@@ -179,6 +179,10 @@ current navigation deletes the session record it is filed under (the
 `sessionKey` bucket, else the host), decision reason
 `self-click-lifted`, only when **all** hold:
 
+- the navigation is a fresh click: `Signals.selfClickAt` is set (adapters set it
+  only for a fresh navigation, never a reload, back/forward or re-check of a URL
+  still carrying the own param) and the lift compares against it, clamped to
+  `now`;
 - the own click's scoped patterns name exactly one network (the catch-all
   `universal` network aside). A click matching patterns for two networks, such as
   a marker shared across networks or one scoped to every policy reading the
@@ -190,7 +194,12 @@ current navigation deletes the session record it is filed under (the
   older than the own click;
 - nothing else matched this navigation (a competing param, cookie or redirect
   blocks it);
-- no contributing policy's `disableHosts` covers the host.
+- no `disableHosts` match ever fed the record (`SessionRecord.disabledHost`,
+  sticky across a `sessionKey` bucket) or covers the current host, and the
+  `universal` catch-all didn't feed it (its `afsrc=1` names no network).
+
+The latest referral is `SessionRecord.lastReferralAt` (falling back to
+`max(startedAt, lastActivityAt)`), which `recordActivity` never moves.
 
 The lift runs before session-exemption bookkeeping, so with `selfExemptionScope:
 'session'` the own click's exemption is then recorded as usual (its lingering

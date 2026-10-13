@@ -1,3 +1,4 @@
+import { freshNavigationStart, type NavigationTimingLike } from './navigation';
 import { StanddownSession } from './session';
 import {
   LocalStorageTtlStateStore,
@@ -100,6 +101,7 @@ export interface ContentWindowLike {
   readonly localStorage?: WebStorageLike | undefined;
   readonly history?: ContentHistoryLike;
   readonly setTimeout?: (handler: () => void, timeout?: number) => unknown;
+  readonly performance?: NavigationTimingLike;
   addEventListener?(type: 'popstate', listener: () => void): void;
   removeEventListener?(type: 'popstate', listener: () => void): void;
 }
@@ -270,6 +272,15 @@ export function collectContentSignals(
 
   if (opts.publisherSites !== undefined) {
     signals.publisherSites = opts.publisherSites;
+  }
+
+  // For selfClickLift: when this document's (fresh) navigation started. Every
+  // re-check of the same document reports the same time, and a reload or
+  // back/forward reports none, so neither counts as a new own click.
+  const selfClickAt = freshNavigationStart(windowLike.performance);
+
+  if (selfClickAt !== undefined) {
+    signals.selfClickAt = selfClickAt;
   }
 
   return signals;

@@ -121,6 +121,13 @@ export interface Signals {
    * when omitted. Never carries user data.
    */
   signalCoverage?: 'full' | 'partial';
+  /**
+   * When the host's own click carried in `url` actually landed. Only
+   * `selfClickLift` reads it, and it lifts only when this is set: a reload,
+   * back/forward or later re-check of a URL that still carries the own param is
+   * not a new click, so collectors leave it unset there. Clamped to `now`.
+   */
+  selfClickAt?: number;
   now: number;
 }
 
@@ -230,6 +237,10 @@ export interface SessionRecord {
    * without this field (written before it existed) is never lifted.
    */
   policyIds?: string[];
+  /** When a referral last matched this record; `recordActivity` never moves it. */
+  lastReferralAt?: number;
+  /** Set once a `disableHosts` match fed this record; such a record is never lifted. */
+  disabledHost?: true;
 }
 
 /**

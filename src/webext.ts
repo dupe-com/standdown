@@ -87,7 +87,11 @@ export interface StanddownWebextController {
   readonly mode: StanddownWebextMode;
   readonly session: StanddownSession;
   readonly store: StateStore;
-  ingestNavigation(tabId: number, url: string): Promise<Decision>;
+  /**
+   * Ingest a navigation. Pass `selfClickAt` (when the click landed) only for a
+   * fresh navigation, never a reload or back/forward, or `selfClickLift` won't fire.
+   */
+  ingestNavigation(tabId: number, url: string, navigation?: { selfClickAt?: number }): Promise<Decision>;
   shouldStandDown(tabId: number, now?: number): Promise<Decision>;
   shouldStandDownForUrl(url: string, now?: number): Promise<Decision>;
   refreshNow(): Promise<StanddownRefreshResult>;
@@ -162,6 +166,10 @@ export interface WebNavigationCommittedDetails {
   readonly tabId: number;
   readonly url: string;
   readonly frameId?: number;
+  /** Chrome's `transitionType`; `'reload'` is not a new click. */
+  readonly transitionType?: string;
+  /** Chrome's `transitionQualifiers`; `'forward_back'` is not a new click. */
+  readonly transitionQualifiers?: readonly string[];
 }
 
 export interface RuntimeMessageSenderLike {
@@ -261,7 +269,13 @@ export function createStanddown(
       return;
     }
 
-    void ingestNavigation(details.tabId, details.url);
+    // For selfClickLift: a reload or back/forward re-shows a URL (own-click
+    // param and all) without a new click, so only other commits carry a time.
+    const fresh =
+      details.transitionType !== 'reload' &&
+      !(details.transitionQualifiers ?? []).includes('forward_back');
+
+    void ingestNavigation(details.tabId, details.url, fresh ? { selfClickAt: now() } : {});
   };
 
   const onRemoved: TabRemovedListener = (tabId) => {
@@ -314,6 +328,7 @@ export function createStanddown(
   async function ingestNavigation(
     tabId: number,
     url: string,
+    navigation: { selfClickAt?: number } = {},
   ): Promise<Decision> {
     const redirectChain = mode === 'webRequest' ? redirectChains.get(tabId) : undefined;
     const initiator = initiators.get(tabId);
@@ -332,6 +347,7 @@ export function createStanddown(
       // Without the webRequest plane we never observe redirect chains, so a
       // non-stand-down could be a false negative — mark the coverage partial.
       signalCoverage: mode === 'webRequest' ? 'full' : 'partial',
+      selfClickAt: navigation.selfClickAt,
     });
     // Remember the key ingest files this navigation under, so a later
     // shouldStandDown(tabId) reads the bucket it wrote rather than the raw host.
@@ -570,6 +586,7 @@ function navigationSignals(value: {
   selfPatterns: readonly SelfExemption[] | undefined;
   publisherSites: readonly string[] | undefined;
   signalCoverage: Signals['signalCoverage'];
+  selfClickAt?: number | undefined;
 }): Signals {
   const signals: Signals = {
     url: value.url,
@@ -594,6 +611,10 @@ function navigationSignals(value: {
 
   if (value.publisherSites !== undefined) {
     signals.publisherSites = value.publisherSites;
+  }
+
+  if (value.selfClickAt !== undefined) {
+    signals.selfClickAt = value.selfClickAt;
   }
 
   return signals;

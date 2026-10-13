@@ -748,6 +748,8 @@ function fakeWindow(url: string, referrer?: string, storage = new Map<string, st
   const window: CaptureWindowLike & { location: { href: string }; storage: Map<string, string> } = {
     location: { href: url },
     document: { referrer: referrer ?? '' },
+    // A real browser on a fresh navigation (own clicks count only then).
+    performance: { timeOrigin: 0, getEntriesByType: () => [{ type: 'navigate' }] },
     storage,
     sessionStorage: {
       getItem: (key) => storage.get(key) ?? null,

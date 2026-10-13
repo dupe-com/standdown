@@ -23,11 +23,17 @@ New opt-in entry point. Nothing changes for hosts that don't use it.
   from a captured param that is no longer in the URL.
 
 - `selfClickLift: 'same-network'` (opt-in, default `'off'`) on `StanddownSession`
-  and every adapter, plus `StanddownSession.liftForSelfClick()`. When the
+  and the `content`, `webext` and `relay` adapters, plus `StanddownSession.liftForSelfClick()`
+  and `Signals.selfClickAt`. When the
   shopper's latest click on a network is the host's own, that network's earlier
   stand-down ends (`reason: 'self-click-lifted'`), since the network now credits
-  that click. The own click must name exactly one network (use a distinct
-  own-click value per network). Never lifts another network's stand-down, a record several
+  that click. Only a fresh navigation counts as a click (a reload,
+  back/forward or re-check of a URL still carrying the own param never lifts):
+  adapters pass `selfClickAt` for fresh navigations only, and `ingest` lifts
+  only when it is set. The own click must name exactly one network (use a
+  distinct own-click value per network). A record the `universal` catch-all
+  fed, or one a `disableHosts` match fed (`SessionRecord.disabledHost`), is
+  never lifted; `SessionRecord.lastReferralAt` dates the latest referral. Never lifts another network's stand-down, a record several
   networks fed, a referral newer than the own click, a navigation with a
   competing signal, or a `disableHosts` host. Session records now track every
   contributing policy (`SessionRecord.policyIds`); records saved before that are

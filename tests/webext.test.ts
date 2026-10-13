@@ -19,6 +19,41 @@ import {
 
 const textEncoder = new TextEncoder();
 
+describe('webext adapter: selfClickLift timing', () => {
+  const selfPatterns = [{ name: 'cjevent', value: 'own', match: 'equals' as const, networkId: 'cj' }];
+  const run = async (own: Partial<WebNavigationCommittedDetails>) => {
+    const chrome = fakeChrome({ webRequest: false });
+    let clock = 1_000;
+    const controller = createStanddown({
+      policies: [cjPolicy],
+      chrome,
+      selfPatterns,
+      selfClickLift: 'same-network',
+      now: () => clock,
+    });
+    chrome.webNavigation?.onCommitted?.emit({ tabId: 7, frameId: 0, url: 'https://merchant.example/?cjevent=abc' });
+    await flushPromises();
+    clock = 2_000;
+    chrome.webNavigation?.onCommitted?.emit({ tabId: 7, frameId: 0, url: 'https://merchant.example/?cjevent=own', ...own });
+    await flushPromises();
+    return controller.shouldStandDown(7, 2_001);
+  };
+
+  it('a fresh navigation carrying our own click lifts the earlier competitor', async () => {
+    await expect(run({ transitionType: 'link' })).resolves.toMatchObject({ standDown: false });
+  });
+
+  it('a reload of our own-click URL is not a new click', async () => {
+    await expect(run({ transitionType: 'reload' })).resolves.toMatchObject({ standDown: true });
+  });
+
+  it('back/forward to our own-click URL is not a new click', async () => {
+    await expect(
+      run({ transitionType: 'link', transitionQualifiers: ['forward_back'] }),
+    ).resolves.toMatchObject({ standDown: true });
+  });
+});
+
 describe('webext adapter', () => {
   it('assembles webRequest redirect chains before webNavigation evaluation', async () => {
     const chrome = fakeChrome({ webRequest: true });

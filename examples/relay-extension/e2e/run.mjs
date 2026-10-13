@@ -45,8 +45,8 @@ const baseRoutes = {
   '/later-clean': html(),
 };
 
-// steps: a URL to open, 'RELOAD', 'RESTART' (close and reopen the browser with
-// the same profile), or { waitMs }. The last page is judged.
+// steps: a URL to open, 'RELOAD', 'BACK', 'RESTART' (close and reopen the browser
+// with the same profile), or { waitMs }. The last page is judged.
 // expect.relay is required; expect.content is optional.
 const baseScenarios = [
   { name: 'replaceState strips ?cjevent=abc before load', steps: [u('s1.example', '/strip?cjevent=abc')], expect: { relay: true, matchKind: 'landing' } },
@@ -109,6 +109,9 @@ async function launch() {
       `--disable-extensions-except=${ext}`,
       `--load-extension=${ext}`,
       '--host-resolver-rules=MAP *.example 127.0.0.1, MAP *.*.example 127.0.0.1',
+      // A 'BACK' step must really re-load the page (so the capture runs again),
+      // not restore it from the back/forward cache, where no script re-runs.
+      '--disable-back-forward-cache',
     ],
   });
   const sw = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
@@ -132,6 +135,12 @@ for (const s of scenarios) {
         await ctx.close();
         ({ context: ctx, sw: worker } = await launch());
         page = await ctx.newPage();
+        continue;
+      }
+      if (step === 'BACK') {
+        await page.evaluate(() => document.documentElement.removeAttribute('data-probe'));
+        await page.goBack();
+        r = await readProbe(page);
         continue;
       }
       if (step === 'RELOAD') {

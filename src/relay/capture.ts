@@ -4,6 +4,7 @@ import {
   exactParams,
   paramMatcherMatches,
 } from '../detect';
+import { freshNavigationStart, type NavigationTimingLike } from '../navigation';
 import type { DomainRule, SelfExemption, StanddownPolicy } from '../types';
 import {
   baseDomain,
@@ -29,6 +30,7 @@ export {
 export interface CaptureWindowLike {
   readonly location: { readonly href: string };
   readonly document: { readonly referrer?: string };
+  readonly performance?: NavigationTimingLike;
   readonly sessionStorage?: {
     getItem(key: string): string | null;
     setItem(key: string, value: string): void;
@@ -90,7 +92,10 @@ export function captureLanding(opts: CaptureLandingOptions): CaptureLandingResul
   const at = now();
   const found = matchLanding(opts, new URL(href), host, win.document.referrer);
   const matches = found.matches;
-  const self = opts.selfClickLift === 'same-network' ? found.self : [];
+  // An own click counts only on a fresh navigation, not a reload or back/forward
+  // that re-shows the own-click URL after a competitor's later referral.
+  const fresh = freshNavigationStart(win.performance) !== undefined;
+  const self = opts.selfClickLift === 'same-network' && fresh ? found.self : [];
   let record: LandingRecord =
     self.length > 0 ? { v: 1, host, at, matches, self } : { v: 1, host, at, matches };
 

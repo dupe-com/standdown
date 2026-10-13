@@ -34,7 +34,7 @@ describe('selfClickLift with the documented per-network selfPatterns', () => {
       ).resolves.toMatchObject({ standDown: true });
 
       await expect(
-        session.ingest({ url: network.own, now: 1_000, selfPatterns }, allPolicies),
+        session.ingest({ url: network.own, now: 1_000, selfPatterns, selfClickAt: 1_000 }, allPolicies),
       ).resolves.toMatchObject({ standDown: false, reason: 'self-click-lifted' });
     });
   }
@@ -45,7 +45,7 @@ describe('selfClickLift with the documented per-network selfPatterns', () => {
 
     await expect(
       session.ingest(
-        { url: 'https://shop.example/?cjevent=def&my_click_id=_mybrand_cj', now: 1_000, selfPatterns },
+        { url: 'https://shop.example/?cjevent=def&my_click_id=_mybrand_cj', now: 1_000, selfClickAt: 1_000, selfPatterns },
         allPolicies,
       ),
     ).resolves.toMatchObject({ standDown: true });
@@ -57,7 +57,7 @@ describe('selfClickLift with the documented per-network selfPatterns', () => {
 
     await expect(
       session.ingest(
-        { url: 'https://shop.example/?cjevent=def&my_click_id=_otherbrand', now: 1_000, selfPatterns },
+        { url: 'https://shop.example/?cjevent=def&my_click_id=_otherbrand', now: 1_000, selfPatterns, selfClickAt: 1_000 },
         allPolicies,
       ),
     ).resolves.toMatchObject({ standDown: true });
@@ -97,7 +97,7 @@ describe('selfClickLift with the documented per-network selfPatterns', () => {
     const session = lifting();
     await session.ingest({ url: 'https://shop.example/?irclickid=abc&afsrc=1', now: 0, selfPatterns: withAfsrc }, allPolicies);
     await expect(
-      session.ingest({ url: own, now: 1_000, selfPatterns: withAfsrc }, allPolicies),
+      session.ingest({ url: own, now: 1_000, selfPatterns: withAfsrc, selfClickAt: 1_000 }, allPolicies),
     ).resolves.toMatchObject({ standDown: true });
   });
 
@@ -113,7 +113,7 @@ describe('selfClickLift with the documented per-network selfPatterns', () => {
 
     await expect(
       session.ingest(
-        { url: 'https://shop.example/?cjevent=def&my_click_id=_mybrand', now: 1_000, selfPatterns: shared },
+        { url: 'https://shop.example/?cjevent=def&my_click_id=_mybrand', now: 1_000, selfPatterns: shared, selfClickAt: 1_000 },
         allPolicies,
       ),
     ).resolves.toMatchObject({ standDown: true });

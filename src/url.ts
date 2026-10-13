@@ -50,11 +50,6 @@ export interface CreateUrlStanddownOptions {
    * scoping rules and for reading state back with `resolveSessionKey`.
    */
   readonly sessionKey?: (url: string) => string | undefined;
-  /**
-   * Let the host's own click lift an active stand-down on the same network.
-   * Off by default. See `StanddownSession`'s `selfClickLift` for the rules.
-   */
-  readonly selfClickLift?: 'off' | 'same-network';
   readonly onDecision?: (decision: Decision, signals: Signals) => void;
 }
 
@@ -193,7 +188,6 @@ function urlSessionOptions(
       selfExemptionScope?: 'policy' | 'session';
       sessionExemptionTtlMs?: number;
       sessionKey?: (url: string) => string | undefined;
-      selfClickLift?: 'off' | 'same-network';
     }
   | undefined {
   const sessionOpts: {
@@ -201,7 +195,6 @@ function urlSessionOptions(
     selfExemptionScope?: 'policy' | 'session';
     sessionExemptionTtlMs?: number;
     sessionKey?: (url: string) => string | undefined;
-    selfClickLift?: 'off' | 'same-network';
   } = {};
 
   if (opts.auditLog !== undefined) {
@@ -218,10 +211,6 @@ function urlSessionOptions(
 
   if (opts.sessionKey !== undefined) {
     sessionOpts.sessionKey = opts.sessionKey;
-  }
-
-  if (opts.selfClickLift !== undefined) {
-    sessionOpts.selfClickLift = opts.selfClickLift;
   }
 
   return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;

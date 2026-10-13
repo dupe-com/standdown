@@ -41,6 +41,17 @@ export default ({ u }) => ({
       expect: { relay: true },
     },
     {
+      // Back to our own-click URL after a competitor's later click is not a new
+      // click of ours: the competitor's click is the latest, so stand down.
+      name: "lift: our click, competitor's CJ click, then Back to our URL -> stands down",
+      steps: [
+        u('l6.example', '/clean?cjevent=own-click'),
+        u('l6.example', '/strip?cjevent=abc'),
+        'BACK',
+      ],
+      expect: { relay: true },
+    },
+    {
       name: 'lift: our own click alone -> clear (exempt as before)',
       steps: [u('l5.example', '/strip?cjevent=own-click')],
       expect: { relay: false },

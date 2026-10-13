@@ -68,8 +68,9 @@ depend on it failed, so they test what they claim.
 | …and the next page of the visit | clear ✅ | **stands down (fails)** |
 | Our CJ click, then a competitor's CJ click | stands down ✅ | stands down |
 | Competitor's Impact click, then our CJ click | stands down ✅ | stands down |
+| Our click, a competitor's CJ click, then **Back** to our URL | stands down ✅ | stands down (before the review fix: **clear, a hijack**) |
 | Our own click alone | clear ✅ | clear |
 
-The base relay scenarios pass unchanged under both configs (13/13 and 15/15 in
+The base relay scenarios pass unchanged under both configs (13/13 and 16/16 in
 total including base cases and the tab-cleanup check).
 

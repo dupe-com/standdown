@@ -409,6 +409,22 @@ export function createRelayStanddown(
       } catch {
         // Not lifting errs toward standing down.
       }
+
+      // One attempt per own click: anything newer than the click can't be
+      // lifted by it, so drop it rather than retry (and re-audit) every query.
+      const consumedAt = selfAt;
+      await serialize(async () => {
+        const current = await load(tabId, at);
+
+        if (current?.selfAt === consumedAt) {
+          await save(tabId, {
+            host: current.host,
+            at: current.at,
+            lastAt: current.lastAt,
+            matches: current.matches,
+          });
+        }
+      }).catch(() => {});
     }
 
     const signals: Signals = {
@@ -464,7 +480,8 @@ export function createRelayStanddown(
   ): Promise<RelayMessageResponse | undefined> {
     if (isCaptureMessage(message)) {
       const tabId = sender?.tab?.id;
-      const senderHost = sender?.url === undefined ? undefined : hostOf(sender.url);
+      const senderUrl = sender?.url ?? sender?.tab?.url;
+      const senderHost = senderUrl === undefined ? undefined : hostOf(senderUrl);
 
       if (
         typeof tabId !== 'number' ||
@@ -476,7 +493,14 @@ export function createRelayStanddown(
         return { ok: false };
       }
 
-      await ingestCapture(tabId, message.record);
+      // With no sender URL the record's host can't be checked. Keep its referral
+      // matches (they only stand down more) but never trust an own click.
+      const record =
+        senderHost === undefined && message.record.self !== undefined
+          ? { v: message.record.v, host: message.record.host, at: message.record.at, matches: message.record.matches }
+          : message.record;
+
+      await ingestCapture(tabId, record);
       return { ok: true };
     }
 
