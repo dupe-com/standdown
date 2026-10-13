@@ -50,7 +50,8 @@ New opt-in entry point. Nothing changes for hosts that don't use it.
   and `cjevent` as evidence of a prior referral, and CJ's `cje` cookie lasts 13
   months from its last update, so its presence mostly hid the host on visits
   nobody referred. A referral param the shop strips before `document_idle` is now
-  caught by `standdown/relay` instead. Hosts that still want a CJ cookie rule can
+  caught by `standdown/relay` instead. `cjPolicy.detection.cookiePatterns` stays as an
+  empty list, so code that reads or overrides it keeps type-checking. Hosts that still want a CJ cookie rule can
   add one to their own policy copy. Rakuten's `lsclick_mid` rule is unchanged:
   Rakuten's policy explicitly requires standing down on it.
 

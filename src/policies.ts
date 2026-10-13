@@ -80,7 +80,9 @@ export const cjPolicy = {
     // No cookie rules. CJ's software policy names only CJ domains, afsrc=1 and
     // cjevent as evidence of a prior referral, and the merchant's `cje` cookie
     // lives 13 months from its last update, so its presence can't tell this
-    // visit's referral from one a year ago.
+    // visit's referral from one a year ago. Kept as an empty list (not removed)
+    // so code that reads or overrides `cookiePatterns` keeps type-checking.
+    cookiePatterns: [],
   },
   standdown: {
     scope: 'advertiser',
