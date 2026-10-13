@@ -231,4 +231,37 @@ describe('lintPolicies', () => {
     ]);
     expect(warnings).toHaveLength(2);
   });
+
+  it('flags landing param names in one policy that differ only by case', () => {
+    const warnings = lintPolicies([
+      {
+        ...cjPolicy,
+        detection: {
+          landingParams: [
+            { anyOf: [{ allOf: [{ name: 'CJSID' }] }] },
+            { anyOf: [{ allOf: [{ name: 'cjsid' }] }] },
+            { anyOf: [{ allOf: [{ name: 'cjevent' }] }] },
+          ],
+        },
+      },
+    ]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/"CJSID", "cjsid"/);
+  });
+
+  it('does not flag the same landing param name reused across groups', () => {
+    expect(
+      lintPolicies([
+        {
+          ...cjPolicy,
+          detection: {
+            landingParams: [
+              { anyOf: [{ allOf: [{ name: 'ranEAID' }, { name: 'ranSiteID' }] }] },
+              { anyOf: [{ allOf: [{ name: 'ranSiteID' }] }] },
+            ],
+          },
+        },
+      ]),
+    ).toEqual([]);
+  });
 });

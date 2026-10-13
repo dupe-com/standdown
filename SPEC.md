@@ -42,7 +42,7 @@ interface StanddownPolicy {
   policyVersion: string            // semver-ish, bumped per data change
   network: { id: string; name: string; policyUrl?: string }
   detection: {
-    landingParams?: ParamRule[]    // matched against the merchant landing/current URL
+    landingParams?: ParamRule[]    // matched against the merchant landing/current URL; names case-insensitive, values exact
     redirectDomains?: DomainRule[] // matched against redirect-chain hops (background plane)
     cookiePatterns?: CookieRule[]  // matched against first-party cookie names (content plane)
     initiatorRules?: InitiatorRule[] // eBay-style referrer classification

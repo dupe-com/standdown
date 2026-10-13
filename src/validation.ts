@@ -124,8 +124,9 @@ export function validatePolicies(
 /**
  * Non-throwing advisory lint over an already-typed policy set. Returns
  * human-readable warnings for structurally-valid but almost-certainly-wrong
- * configuration — today, bare-label `suffix` DomainRules (the substring mis-port
- * that silently makes a host block inert; see {@link validatePolicy}). Unlike
+ * configuration — bare-label `suffix` DomainRules (the substring mis-port
+ * that silently makes a host block inert; see {@link validatePolicy}) and
+ * landing param names that differ only by case. Unlike
  * {@link validatePolicies} it never throws, so adapters can run it at
  * construction and surface the warning **once, immediately** rather than leaving
  * it buried in per-navigation console noise. Returns `[]` for a clean set.
@@ -151,9 +152,45 @@ export function lintPolicies(policies: readonly StanddownPolicy[]): string[] {
         warnings.push(warning);
       }
     }
+
+    warnings.push(...caseOnlyLandingParamWarnings(policy));
   }
 
   return warnings;
+}
+
+/**
+ * Landing param names match case-insensitively, so two names in one policy
+ * that differ only by case (`CJSID` / `cjsid`) are redundant. Harmless — any
+ * matching group stands down — but it usually means a case workaround that can
+ * now be dropped.
+ */
+function caseOnlyLandingParamWarnings(policy: StanddownPolicy): string[] {
+  const spellings = new Map<string, Set<string>>();
+
+  for (const rule of policy.detection.landingParams ?? []) {
+    for (const group of rule.anyOf ?? []) {
+      for (const matcher of group.allOf ?? []) {
+        if (typeof matcher?.name !== 'string') {
+          continue;
+        }
+
+        const key = matcher.name.toLowerCase();
+        const names = spellings.get(key) ?? new Set<string>();
+        names.add(matcher.name);
+        spellings.set(key, names);
+      }
+    }
+  }
+
+  return [...spellings.values()]
+    .filter((names) => names.size > 1)
+    .map(
+      (names) =>
+        `standdown: policy ${JSON.stringify(policy.id)} lists landing param ` +
+        `names that differ only by case (${[...names].map((name) => JSON.stringify(name)).join(', ')}). ` +
+        'Landing param names match case-insensitively, so one spelling is enough.',
+    );
 }
 
 /**
