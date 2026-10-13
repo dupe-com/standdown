@@ -384,11 +384,12 @@ function parseExemptionRecord(value: unknown): ExemptionRecord {
     throw new Error('invalid exemption record');
   }
 
-  const { advertiserHost, policyIds, networkIds, grantedAt } = value;
+  const { advertiserHost, policyIds, networkIds, grantedAt, expiresAt } = value;
 
   if (
     typeof advertiserHost !== 'string' ||
     typeof grantedAt !== 'number' ||
+    (expiresAt !== undefined && typeof expiresAt !== 'number') ||
     !Array.isArray(policyIds) ||
     !policyIds.every((id) => typeof id === 'string') ||
     !Array.isArray(networkIds) ||
@@ -397,12 +398,18 @@ function parseExemptionRecord(value: unknown): ExemptionRecord {
     throw new Error('invalid exemption record');
   }
 
-  return {
+  const record: ExemptionRecord = {
     advertiserHost,
     policyIds: [...policyIds],
     networkIds: [...networkIds],
     grantedAt,
   };
+
+  if (expiresAt !== undefined) {
+    record.expiresAt = expiresAt;
+  }
+
+  return record;
 }
 
 function parseSessionRecord(value: unknown): SessionRecord {
