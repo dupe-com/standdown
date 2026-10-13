@@ -28,6 +28,7 @@ import {
   type LandingRecord,
   RELAY_CAPTURE_MESSAGE,
   RELAY_SHOULD_STAND_DOWN_MESSAGE,
+  type RelayShouldStandDownMessage,
 } from './shared';
 
 export {
@@ -37,6 +38,8 @@ export {
   type LandingRecord,
   RELAY_CAPTURE_MESSAGE,
   RELAY_SHOULD_STAND_DOWN_MESSAGE,
+  type RelayShouldStandDownMessage,
+  shouldStandDownMessage,
 } from './shared';
 
 const TAB_KEY_PREFIX = 'standdown:relay:tab:';
@@ -117,13 +120,6 @@ export interface TabLanding {
   /** `selfClickLift` only: policies the tab's latest own click covered, and when. */
   readonly self?: readonly string[];
   readonly selfAt?: number;
-}
-
-export interface RelayShouldStandDownMessage {
-  readonly type: typeof RELAY_SHOULD_STAND_DOWN_MESSAGE;
-  readonly url?: string;
-  /** Only used when the sender is not a tab (e.g. a popup). */
-  readonly tabId?: number;
 }
 
 export interface RelayMessageResponse {

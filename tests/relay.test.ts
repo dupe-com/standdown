@@ -11,6 +11,7 @@ import {
   captureLanding,
   RELAY_SESSION_STORAGE_KEY,
   type RelayCaptureMessage,
+  shouldStandDownMessage,
 } from '../src/relay/capture';
 import type { ChromeStorageAreaLike } from '../src/stores';
 import type { SelfExemption, StanddownPolicy } from '../src/types';
@@ -312,7 +313,8 @@ describe('relay: capture at document_start, decide in background', () => {
     const expected = { v: 1, host: 'shop.example', at: 1_000, matches: [{ policyId: 'cj', params: ['cjevent'] }] };
     expect(page.record).toEqual(expected);
     expect(JSON.parse(page.window.storage.get(RELAY_SESSION_STORAGE_KEY) ?? 'null')).toEqual(expected);
-    expect(h.sent).toEqual([{ type: 'standdown:relay:capture', record: expected }]);
+    // Exactly the record plus a send time (for message routers); nothing else.
+    expect(h.sent).toEqual([{ type: 'standdown:relay:capture', record: expected, timestamp: 1_000 }]);
     expect(h.sessionArea.data.get(`standdown:relay:tab:${TAB}`)).toEqual({
       host: 'shop.example',
       at: 1_000,
@@ -423,6 +425,53 @@ describe('relay: capture at document_start, decide in background', () => {
   it('fails closed on an unparseable URL', async () => {
     const h = harness();
     await expect(h.query('not a url', 1_000)).resolves.toMatchObject({ standDown: true });
+  });
+});
+
+describe('relay: alongside a message router that answers unknown messages', () => {
+  // @webext-core/messaging (common in WXT extensions) throws on any runtime
+  // message without a string `type` and numeric `timestamp`, and the browser
+  // polyfill turns that throw into an error REPLY, which wins if it lands first.
+  const webextCoreLikeRouter = (message: unknown, _sender: unknown, sendResponse: (r: unknown) => void) => {
+    const m = message as { type?: unknown; timestamp?: unknown };
+    if (typeof m?.type !== 'string' || typeof m?.timestamp !== 'number') {
+      sendResponse({ __mozWebExtensionPolyfillReject__: true, message: '[messaging] Unknown message format' });
+      return true;
+    }
+    return undefined; // well-formed but not ours: stays silent
+  };
+
+  it("the relay's own messages are well-formed for such a router", () => {
+    expect(shouldStandDownMessage('https://shop.example/', 7)).toEqual({
+      type: 'standdown:relay:shouldStandDown',
+      timestamp: expect.any(Number),
+      url: 'https://shop.example/',
+      tabId: 7,
+    });
+    const h = harness();
+    h.open('https://shop.example/?cjevent=abc', 1_000);
+    expect(h.sent[0]).toMatchObject({ type: 'standdown:relay:capture', timestamp: 1_000 });
+  });
+
+  it('the relay still gets the reply when the router listens first', async () => {
+    const h = harness();
+    // Router registered BEFORE the relay's listener, like an app's messaging setup.
+    const registered = [...h.chrome.runtime.onMessage.listeners];
+    h.chrome.runtime.onMessage.listeners.clear();
+    h.chrome.runtime.onMessage.listeners.add(webextCoreLikeRouter as never);
+    for (const listener of registered) h.chrome.runtime.onMessage.listeners.add(listener);
+    const sender = { tab: { id: TAB, url: 'https://shop.example/' }, frameId: 0, url: 'https://shop.example/' };
+
+    const capture = { type: 'standdown:relay:capture', record: { v: 1, host: 'shop.example', at: 1_000, matches: [{ policyId: 'cj', params: ['cjevent'] }] }, timestamp: 1_000 };
+    await expect(h.chrome.runtime.onMessage.dispatch(capture, sender)).resolves.toEqual({ ok: true });
+    await expect(
+      h.chrome.runtime.onMessage.dispatch(shouldStandDownMessage('https://shop.example/'), sender),
+    ).resolves.toMatchObject({ ok: true, decision: { standDown: true, policyId: 'cj' } });
+
+    // Without a timestamp, the router's error reply wins: the clash this guards.
+    await expect(
+      h.chrome.runtime.onMessage.dispatch({ type: 'standdown:relay:shouldStandDown', url: 'https://shop.example/' }, sender),
+    ).resolves.toMatchObject({ __mozWebExtensionPolyfillReject__: true });
   });
 });
 

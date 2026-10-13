@@ -278,12 +278,17 @@ const relay = createRelayStanddown({
 **Query** from any content script (the tab comes from `sender.tab.id`):
 
 ```ts
-const { decision } = await chrome.runtime.sendMessage({
-  type: 'standdown:relay:shouldStandDown',
-  url: location.href,
-});
+import { shouldStandDownMessage } from 'standdown/relay/capture';
+
+const { decision } = await chrome.runtime.sendMessage(shouldStandDownMessage(location.href));
 if (decision.standDown) return; // decision.matchKind === 'landing' when the param was stripped
 ```
+
+Use `shouldStandDownMessage()` rather than a literal. Its `timestamp` (also on the
+capture's own message) keeps message routers that throw on, and *answer*, any
+runtime message without a `type` and numeric `timestamp` from replying before the
+relay does. `@webext-core/messaging`, common in WXT extensions, is one: without
+the timestamp its error reply wins, and every query fails closed.
 
 What happens:
 

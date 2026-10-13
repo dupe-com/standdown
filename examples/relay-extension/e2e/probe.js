@@ -1,5 +1,6 @@
 import { allPolicies } from 'standdown/policies';
 import { createContentStanddown } from 'standdown/content';
+import { shouldStandDownMessage } from 'standdown/relay/capture';
 
 // Test-only stand-in for offer.js. At document_idle it asks the relay AND runs
 // the plain `content` adapter on the same page, so each scenario shows the old
@@ -17,7 +18,7 @@ const contentOptions = __PROBE_CONTENT_OPTIONS__;
     out.content = { error: String(e) };
   }
   try {
-    const r = await chrome.runtime.sendMessage({ type: 'standdown:relay:shouldStandDown', url: location.href });
+    const r = await chrome.runtime.sendMessage(shouldStandDownMessage(location.href));
     out.relay = { ok: r?.ok, standDown: r?.decision?.standDown, matchKind: r?.decision?.matchKind, reason: r?.decision?.reason };
   } catch (e) {
     out.relay = { error: String(e) };

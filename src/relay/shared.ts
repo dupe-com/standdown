@@ -43,6 +43,40 @@ export interface LandingMatch {
 export interface RelayCaptureMessage {
   readonly type: typeof RELAY_CAPTURE_MESSAGE;
   readonly record: LandingRecord;
+  /**
+   * Send time. Not used by the relay; it makes the message well-formed for
+   * message routers that throw on (and answer) anything without a `type` and
+   * numeric `timestamp`, such as `@webext-core/messaging`. A router that
+   * answers first would win the reply.
+   */
+  readonly timestamp: number;
+}
+
+/** The query a content script or popup sends; see {@link shouldStandDownMessage}. */
+export interface RelayShouldStandDownMessage {
+  readonly type: typeof RELAY_SHOULD_STAND_DOWN_MESSAGE;
+  readonly url?: string;
+  /** Only used when the sender is not a tab (e.g. a popup). */
+  readonly tabId?: number;
+  /** See {@link RelayCaptureMessage.timestamp}. */
+  readonly timestamp?: number;
+}
+
+/**
+ * Build the `standdown:relay:shouldStandDown` query. Prefer this over a literal:
+ * it adds the `timestamp` that keeps routers like `@webext-core/messaging` from
+ * answering the message before the relay does.
+ */
+export function shouldStandDownMessage(
+  url?: string,
+  tabId?: number,
+): RelayShouldStandDownMessage {
+  return {
+    type: RELAY_SHOULD_STAND_DOWN_MESSAGE,
+    timestamp: Date.now(),
+    ...(url === undefined ? {} : { url }),
+    ...(tabId === undefined ? {} : { tabId }),
+  };
 }
 
 /**

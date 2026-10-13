@@ -16,7 +16,10 @@ New opt-in entry point. Nothing changes for hosts that don't use it.
   close, and carries across a same-base or tracking-host forward within 10 seconds
   (`hopWindowMs`). Server-side redirect hops remain out of reach (no page loads).
   Matches landing param names in any casing like detection, keeps own-click
-  matching exact, and accepts the session `sessionKey` option.
+  matching exact, and accepts the session `sessionKey` option. Its messages carry
+  a numeric `timestamp` (build queries with `shouldStandDownMessage()`), so
+  routers such as `@webext-core/messaging` that answer malformed messages don't
+  reply before the relay does.
 - `policy.detection.trackingHosts?: DomainRule[]` (optional; empty in bundled
   policies), used only by the relay for cross-host forwards.
 - `Decision.matchKind?: 'landing'`, set only by the relay when the stand-down came

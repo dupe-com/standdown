@@ -1,9 +1,11 @@
+import { shouldStandDownMessage } from 'standdown/relay/capture';
+
 // Runs at document_idle, which is when a host usually decides whether to show
 // UI. By now the shop may already have stripped `?cjevent=abc` from the URL; the
 // relay still remembers it was there. The tab comes from sender.tab.id, so the
 // message only needs the current URL.
 chrome.runtime
-  .sendMessage({ type: 'standdown:relay:shouldStandDown', url: location.href })
+  .sendMessage(shouldStandDownMessage(location.href))
   .then(({ decision }) => {
     // Fail closed: show nothing unless the decision clearly says "not standing
     // down". Like `content`, gate on `standDown` ALONE (see AGENTS.md Step 4).

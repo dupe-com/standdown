@@ -238,6 +238,10 @@ post — when the run passes.
   use `kind: 'regex'`. `validatePolicy` warns on bare-label suffixes.
 - **`allPolicies` is the verified set.** `experimentalPolicies` (skimlinks,
   partnerize) have inferred redirect domains — opt in only after verifying.
+- **Relay + a message router (WXT, `@webext-core/messaging`):** send relay queries
+  with `shouldStandDownMessage(url)`, never a literal `{ type, url }`. Routers
+  that throw on messages without a numeric `timestamp` answer first otherwise,
+  and every relay query then fails closed.
 - **Own-click lift is opt-in.** `selfClickLift: 'same-network'` lets your own
   click end an earlier competitor's stand-down on the same network. It only works
   with `selfPatterns` scoped per network to a value only your clicks carry, never

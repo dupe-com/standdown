@@ -25,6 +25,8 @@ export {
   RELAY_CAPTURE_MESSAGE,
   RELAY_SESSION_STORAGE_KEY,
   type RelayCaptureMessage,
+  type RelayShouldStandDownMessage,
+  shouldStandDownMessage,
 } from './shared';
 
 export interface CaptureWindowLike {
@@ -119,7 +121,10 @@ export function captureLanding(opts: CaptureLandingOptions): CaptureLandingResul
     // sessionStorage can be blocked; the background relay still works.
   }
 
-  return { record, delivered: send(opts, { type: RELAY_CAPTURE_MESSAGE, record }) };
+  return {
+    record,
+    delivered: send(opts, { type: RELAY_CAPTURE_MESSAGE, record, timestamp: now() }),
+  };
 }
 
 function matchLanding(
