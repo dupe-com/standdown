@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { guardActivation, lintPolicies, validatePolicy } from '../src';
+import { guardActivation, lintPolicies, MemoryStateStore, StanddownSession, validatePolicy } from '../src';
 import { allPolicies, amazonPolicy, cjPolicy, ebayEpnPolicy, policiesFor } from '../src/policies';
 
 const trustedClick = {
@@ -12,6 +12,26 @@ const benefit = {
   kind: 'cashback',
   description: 'Activate cashback for this purchase.',
 } as const;
+
+describe('cjPolicy cookie rules', () => {
+  it('keeps the cookiePatterns field, which hosts read and override', () => {
+    // Shape, not content: removing the key would break hosts' type-checking.
+    // `bun run typecheck` covers tests/, so this line also fails to compile then.
+    expect(Array.isArray(cjPolicy.detection.cookiePatterns)).toBe(true);
+  });
+
+  it("doesn't stand down on a lone CJ cookie (cje / cjevent_dc)", async () => {
+    // Behaviour: CJ's 13-month cookie is not evidence of this visit's referral.
+    const session = new StanddownSession(new MemoryStateStore());
+
+    await expect(
+      session.ingest(
+        { url: 'https://merchant.example/', now: 0, cookieNames: ['cje', 'cjevent_dc'] },
+        [cjPolicy],
+      ),
+    ).resolves.toMatchObject({ standDown: false });
+  });
+});
 
 describe('guardActivation', () => {
   it('allows trusted user-click activation with a declared benefit and no stand-down', () => {

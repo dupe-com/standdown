@@ -9,7 +9,12 @@ import {
   validatePolicy,
 } from '../src';
 import { cjPolicy } from '../src/policies';
-import { SessionStorageStateStore, type WebStorageLike } from '../src/stores';
+import {
+  ChromeLocalStateStore,
+  type ChromeStorageAreaLike,
+  SessionStorageStateStore,
+  type WebStorageLike,
+} from '../src/stores';
 
 const behaviors = [
   'suppress-prompts',
@@ -17,6 +22,17 @@ const behaviors = [
   'no-redirect',
   'no-background-tracking',
 ] as const satisfies readonly Behavior[];
+
+// The exemption-TTL tests need an ambient signal that a live self-exemption
+// suppresses. The bundled CJ policy has no cookie rule, so they use this
+// fixture: CJ plus one lingering cookie name.
+const cjWithLingeringCookie = {
+  ...cjPolicy,
+  detection: {
+    ...cjPolicy.detection,
+    cookiePatterns: [{ name: 'cjevent_dc', match: 'substring' }],
+  },
+} as const satisfies StanddownPolicy;
 
 describe('StanddownSession', () => {
   it('keeps session-or-min stand-downs active while the session store retains them', async () => {
@@ -43,6 +59,38 @@ describe('StanddownSession', () => {
     await expect(
       session.shouldStandDown('merchant.example', 31 * 60 * 1_000),
     ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+  });
+
+  it('re-arms the CJ 60-minute floor on each new referral across a browser restart', async () => {
+    const local = new FakeChromeStorageArea();
+    const inSession = (sessionId: string, now: number) =>
+      new StanddownSession(new ChromeLocalStateStore(local, { sessionId, now: () => now }));
+
+    // CJ referrals at 0 and 50 min, in one browser session.
+    await inSession('browser-session-1', 0).ingest(
+      { url: 'https://merchant.example/?cjevent=abc', now: 0 },
+      [cjPolicy],
+    );
+    await inSession('browser-session-1', 3_000_000).ingest(
+      { url: 'https://merchant.example/?cjevent=def', now: 3_000_000 },
+      [cjPolicy],
+    );
+
+    // Browser restarted at 70 min: the floor counts from the 50-min referral.
+    await expect(
+      inSession('browser-session-2', 4_200_000).ingest(
+        { url: 'https://merchant.example/', now: 4_200_000 },
+        [cjPolicy],
+      ),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+
+    // Restarted again at 110 min: 60 min after the latest referral, it lapses.
+    await expect(
+      inSession('browser-session-3', 6_600_000).ingest(
+        { url: 'https://merchant.example/', now: 6_600_000 },
+        [cjPolicy],
+      ),
+    ).resolves.toMatchObject({ standDown: false });
   });
 
   it('does not extend session-or-min records when activity is recorded', async () => {
@@ -346,7 +394,7 @@ describe('StanddownSession', () => {
     await expect(
       session.ingest(
         { url: 'https://merchant.example/?cjevent=own', now: 0, selfPatterns },
-        [cjPolicy],
+        [cjWithLingeringCookie],
       ),
     ).resolves.toMatchObject({ standDown: false });
 
@@ -359,7 +407,7 @@ describe('StanddownSession', () => {
           now: 60_000,
           cookieNames: ['cjevent_dc'],
         },
-        [cjPolicy],
+        [cjWithLingeringCookie],
       ),
     ).resolves.toMatchObject({ standDown: false });
 
@@ -372,7 +420,7 @@ describe('StanddownSession', () => {
           now: 1_800_001,
           cookieNames: ['cjevent_dc'],
         },
-        [cjPolicy],
+        [cjWithLingeringCookie],
       ),
     ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
   });
@@ -388,7 +436,7 @@ describe('StanddownSession', () => {
 
     await session.ingest(
       { url: 'https://merchant.example/?cjevent=own', now: 0, selfPatterns },
-      [cjPolicy],
+      [cjWithLingeringCookie],
     );
 
     // Well past any default window, the exemption still re-attributes the
@@ -400,7 +448,7 @@ describe('StanddownSession', () => {
           now: 10 * 60 * 60 * 1_000,
           cookieNames: ['cjevent_dc'],
         },
-        [cjPolicy],
+        [cjWithLingeringCookie],
       ),
     ).resolves.toMatchObject({ standDown: false });
   });
@@ -416,7 +464,7 @@ describe('StanddownSession', () => {
     });
     await first.ingest(
       { url: 'https://merchant.example/?cjevent=own', now: 0, selfPatterns },
-      [cjPolicy],
+      [cjWithLingeringCookie],
     );
 
     // A fresh session over the same persisted state: the exemption is reloaded
@@ -434,7 +482,7 @@ describe('StanddownSession', () => {
           now: 1_800_001,
           cookieNames: ['cjevent_dc'],
         },
-        [cjPolicy],
+        [cjWithLingeringCookie],
       ),
     ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
   });
@@ -656,5 +704,28 @@ class FakeWebStorage implements WebStorageLike {
 
   removeItem(key: string): void {
     this.#items.delete(key);
+  }
+}
+
+class FakeChromeStorageArea implements ChromeStorageAreaLike {
+  readonly data: Record<string, unknown> = {};
+
+  get(
+    keys?: string | string[] | Record<string, unknown> | null,
+    callback?: (items: Record<string, unknown>) => void,
+  ): undefined {
+    const names = typeof keys === 'string' ? [keys] : Array.isArray(keys) ? keys : Object.keys(this.data);
+    const items: Record<string, unknown> = {};
+    for (const name of names) {
+      if (name in this.data) items[name] = structuredClone(this.data[name]);
+    }
+    callback?.(items);
+    return undefined;
+  }
+
+  set(items: Record<string, unknown>, callback?: () => void): undefined {
+    Object.assign(this.data, structuredClone(items));
+    callback?.();
+    return undefined;
   }
 }

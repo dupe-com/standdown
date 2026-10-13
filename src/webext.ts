@@ -1,5 +1,5 @@
 import { verifyPolicyBundle } from './bundle';
-import { StanddownSession } from './session';
+import { pickSessionOptions, StanddownSession } from './session';
 import {
   ChromeLocalStateStore,
   type ChromeRuntimeLike,
@@ -76,13 +76,22 @@ export interface CreateStanddownOptions {
    * on the same bucket the navigation wrote.
    */
   readonly sessionKey?: (url: string) => string | undefined;
+  /**
+   * Let the host's own click lift an active stand-down on the same network.
+   * Off by default. See `StanddownSession`'s `selfClickLift` for the rules.
+   */
+  readonly selfClickLift?: 'off' | 'same-network';
 }
 
 export interface StanddownWebextController {
   readonly mode: StanddownWebextMode;
   readonly session: StanddownSession;
   readonly store: StateStore;
-  ingestNavigation(tabId: number, url: string): Promise<Decision>;
+  /**
+   * Ingest a navigation. Pass `selfClickAt` (when the click landed) only for a
+   * fresh navigation, never a reload or back/forward, or `selfClickLift` won't fire.
+   */
+  ingestNavigation(tabId: number, url: string, navigation?: { selfClickAt?: number }): Promise<Decision>;
   shouldStandDown(tabId: number, now?: number): Promise<Decision>;
   shouldStandDownForUrl(url: string, now?: number): Promise<Decision>;
   refreshNow(): Promise<StanddownRefreshResult>;
@@ -157,6 +166,10 @@ export interface WebNavigationCommittedDetails {
   readonly tabId: number;
   readonly url: string;
   readonly frameId?: number;
+  /** Chrome's `transitionType`; `'reload'` is not a new click. */
+  readonly transitionType?: string;
+  /** Chrome's `transitionQualifiers`; `'forward_back'` is not a new click. */
+  readonly transitionQualifiers?: readonly string[];
 }
 
 export interface RuntimeMessageSenderLike {
@@ -203,7 +216,7 @@ export function createStanddown(
       sessionId: opts.sessionId,
       now,
     });
-  const session = new StanddownSession(store, sessionOptions(opts));
+  const session = new StanddownSession(store, pickSessionOptions(opts));
   const redirectChains = new Map<number, string[]>();
   const redirectRequestIds = new Map<number, string>();
   const initiators = new Map<number, string>();
@@ -256,7 +269,13 @@ export function createStanddown(
       return;
     }
 
-    void ingestNavigation(details.tabId, details.url);
+    // For selfClickLift: a reload or back/forward re-shows a URL (own-click
+    // param and all) without a new click, so only other commits carry a time.
+    const fresh =
+      details.transitionType !== 'reload' &&
+      !(details.transitionQualifiers ?? []).includes('forward_back');
+
+    void ingestNavigation(details.tabId, details.url, fresh ? { selfClickAt: now() } : {});
   };
 
   const onRemoved: TabRemovedListener = (tabId) => {
@@ -309,6 +328,7 @@ export function createStanddown(
   async function ingestNavigation(
     tabId: number,
     url: string,
+    navigation: { selfClickAt?: number } = {},
   ): Promise<Decision> {
     const redirectChain = mode === 'webRequest' ? redirectChains.get(tabId) : undefined;
     const initiator = initiators.get(tabId);
@@ -327,6 +347,7 @@ export function createStanddown(
       // Without the webRequest plane we never observe redirect chains, so a
       // non-stand-down could be a false negative — mark the coverage partial.
       signalCoverage: mode === 'webRequest' ? 'full' : 'partial',
+      selfClickAt: navigation.selfClickAt,
     });
     // Remember the key ingest files this navigation under, so a later
     // shouldStandDown(tabId) reads the bucket it wrote rather than the raw host.
@@ -485,41 +506,6 @@ export function createStanddown(
   };
 }
 
-function sessionOptions(
-  opts: CreateStanddownOptions,
-):
-  | {
-      auditLog?: boolean;
-      selfExemptionScope?: 'policy' | 'session';
-      sessionExemptionTtlMs?: number;
-      sessionKey?: (url: string) => string | undefined;
-    }
-  | undefined {
-  const sessionOpts: {
-    auditLog?: boolean;
-    selfExemptionScope?: 'policy' | 'session';
-    sessionExemptionTtlMs?: number;
-    sessionKey?: (url: string) => string | undefined;
-  } = {};
-
-  if (opts.auditLog !== undefined) {
-    sessionOpts.auditLog = opts.auditLog;
-  }
-
-  if (opts.selfExemptionScope !== undefined) {
-    sessionOpts.selfExemptionScope = opts.selfExemptionScope;
-  }
-
-  if (opts.sessionExemptionTtlMs !== undefined) {
-    sessionOpts.sessionExemptionTtlMs = opts.sessionExemptionTtlMs;
-  }
-
-  if (opts.sessionKey !== undefined) {
-    sessionOpts.sessionKey = opts.sessionKey;
-  }
-
-  return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;
-}
 
 function createChromeStore(
   chromeApi: ChromeLike | undefined,
@@ -559,6 +545,7 @@ function navigationSignals(value: {
   selfPatterns: readonly SelfExemption[] | undefined;
   publisherSites: readonly string[] | undefined;
   signalCoverage: Signals['signalCoverage'];
+  selfClickAt?: number | undefined;
 }): Signals {
   const signals: Signals = {
     url: value.url,
@@ -583,6 +570,10 @@ function navigationSignals(value: {
 
   if (value.publisherSites !== undefined) {
     signals.publisherSites = value.publisherSites;
+  }
+
+  if (value.selfClickAt !== undefined) {
+    signals.selfClickAt = value.selfClickAt;
   }
 
   return signals;

@@ -59,7 +59,13 @@ The choice is driven by **permissions, not manifest version.**
 | MV3 extension that holds (and will keep) `webRequest`/`webNavigation` | `standdown/webext` | `createStanddown()` |
 | MV3 extension **without** those permissions, or that can't add them | `standdown/content` | `createContentStanddown()` |
 | Safari / page- or content-script-only | `standdown/content` | `createContentStanddown()` |
+| MV3 **without** `webNavigation`, on shops that strip referral params before `document_idle` | `standdown/relay/capture` + `standdown/relay/background` | `captureLanding()` at `document_start` + `createRelayStanddown()` (see `INSTALL.md` → Relay adapter) |
 | Non-extension or custom host | `standdown` | `StanddownSession` + `guardActivation` |
+
+**Relay vs content:** both need no new permissions. If the extension has a
+background service worker, prefer `relay`: it also catches referral params the
+shop strips before `document_idle`, which `content` misses. Use `content` alone
+for Safari / content-script-only contexts.
 
 **Decision rule:** if the extension does not already hold
 `webRequest`/`webNavigation`, use `content`. Do **not** add those permissions to
@@ -159,6 +165,9 @@ with the exact `esbuild` bundle command:
   (background worker + popup).
 - **content adapter** → [`examples/content-extension`](./examples/content-extension)
   (a content script that gates on `decision.standDown` alone).
+- **relay adapter** → [`examples/relay-extension`](./examples/relay-extension)
+  (a `document_start` capture plus a background decision, with a real-browser
+  check in `e2e/run.mjs`).
 
 Mirror whichever matches your adapter, then load the bundled output unpacked and
 click through a partner flow to confirm you go quiet when attribution already
@@ -229,6 +238,15 @@ post — when the run passes.
   use `kind: 'regex'`. `validatePolicy` warns on bare-label suffixes.
 - **`allPolicies` is the verified set.** `experimentalPolicies` (skimlinks,
   partnerize) have inferred redirect domains — opt in only after verifying.
+- **Relay + a message router (WXT, `@webext-core/messaging`):** send relay queries
+  with `shouldStandDownMessage(url)`, never a literal `{ type, url }`. Routers
+  that throw on messages without a numeric `timestamp` answer first otherwise,
+  and every relay query then fails closed.
+- **Own-click lift is opt-in.** `selfClickLift: 'same-network'` lets your own
+  click end an earlier competitor's stand-down on the same network. It only works
+  with `selfPatterns` scoped per network to a value only your clicks carry, never
+  a bare network click ID (`cjevent`, `irclickid`, `awc`). See `INSTALL.md` →
+  Self-exemption scope.
 - **`amazon` is detect-only** (`activation.mode: never`) — the guard never allows
   activation on Amazon hosts unless you override the policy.
 

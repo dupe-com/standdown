@@ -59,6 +59,9 @@ export function validatePolicy(value: unknown): asserts value is StanddownPolicy
   optionalArray(detection.disableHosts, 'policy.detection.disableHosts').forEach(
     validateDomainRule,
   );
+  optionalArray(detection.trackingHosts, 'policy.detection.trackingHosts').forEach(
+    validateDomainRule,
+  );
 
   const standdown = object(policy.standdown, 'policy.standdown');
   literal(standdown.scope, 'advertiser', 'policy.standdown.scope');
@@ -144,6 +147,7 @@ export function lintPolicies(policies: readonly StanddownPolicy[]): string[] {
       ...(detection.disableHosts ?? []),
       ...(detection.redirectDomains ?? []),
       ...(detection.advertiserHosts ?? []),
+      ...(detection.trackingHosts ?? []),
     ];
 
     for (const rule of domainRules) {

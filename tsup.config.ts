@@ -7,6 +7,8 @@ export default defineConfig({
     webext: 'src/webext.ts',
     content: 'src/content.ts',
     url: 'src/url.ts',
+    'relay/capture': 'src/relay/capture.ts',
+    'relay/background': 'src/relay/background.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

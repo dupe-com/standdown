@@ -1,5 +1,101 @@
 # Changelog
 
+## Unreleased (minor)
+
+New opt-in `standdown/relay` entry point and `selfClickLift`, plus a few default
+changes listed under *Upgrading from 0.3.x*.
+
+### Upgrading from 0.3.x
+
+No exports were removed, and code written for 0.3.3 still type-checks (its own
+test suite compiles unchanged). What existing users will notice:
+
+- **CJ stands down correctly: on the referral, not on its cookie.** A CJ landing
+  param, redirect domain or `afsrc=1` stands down as before; the `cje` /
+  `cjevent_dc` cookie alone no longer does, since it lasts 13 months and can't
+  tell this visit's referral from an old one.
+- **Landing param names match in any casing** (`CJEVENT`, `CjEvent`), so you may
+  stand down on landings you used to miss.
+- **A `session-or-min` stand-down survives a browser restart for its minimum
+  counted from the latest referral**, not the first.
+- **A session self-exemption now expires after a reload** too (it never did with
+  a persistent store).
+- Saved state gains optional fields (`policyIds`, `lastReferralAt`,
+  `disabledHost`). 0.3.3 ignores them, so rolling back keeps working.
+- With a signed policy refresh, a served bundle that still carries CJ's cookie
+  rules is accepted and brings them back for that host.
+
+### Added
+
+- `standdown/relay/capture` and `standdown/relay/background`: capture the landing
+  at `document_start` and decide in the background, so a referral param a shop
+  strips (`history.replaceState`, or a script forward) before `document_idle`
+  still stands the host down. Needs no new permission (no `webNavigation`,
+  `webRequest`, `tabs` or `scripting`). Keeps only matched param names, the host
+  and a timestamp — never URLs or param values. Defaults: a landing record counts
+  for up to 30 minutes (`maxAgeMs`), ends early on an unrelated navigation or tab
+  close, and carries across a same-base or tracking-host forward within 10 seconds
+  (`hopWindowMs`). Server-side redirect hops remain out of reach (no page loads).
+  Matches landing param names in any casing like detection, keeps own-click
+  matching exact, and accepts the session `sessionKey` option. Its messages carry
+  a numeric `timestamp` (build queries with `shouldStandDownMessage()`), so
+  routers such as `@webext-core/messaging` that answer malformed messages don't
+  reply before the relay does.
+- `policy.detection.trackingHosts?: DomainRule[]` (optional; empty in bundled
+  policies), used only by the relay for cross-host forwards.
+- `Decision.matchKind?: 'landing'`, set only by the relay when the stand-down came
+  from a captured param that is no longer in the URL.
+
+- `selfClickLift: 'same-network'` (opt-in, default `'off'`) on `StanddownSession`
+  and the `content`, `webext` and `relay` adapters, plus `StanddownSession.liftForSelfClick()`
+  and `Signals.selfClickAt`. When the
+  shopper's latest click on a network is the host's own, that network's earlier
+  stand-down ends (`reason: 'self-click-lifted'`), since the network now credits
+  that click. Only a fresh navigation counts as a click (a reload,
+  back/forward or re-check of a URL still carrying the own param never lifts):
+  adapters pass `selfClickAt` for fresh navigations only, and `ingest` lifts
+  only when it is set. The own click must name exactly one network (use a
+  distinct own-click value per network). A record the `universal` catch-all
+  fed, or one a `disableHosts` match fed (`SessionRecord.disabledHost`), is
+  never lifted; `SessionRecord.lastReferralAt` dates the latest referral. Never lifts another network's stand-down, a record several
+  networks fed, a referral newer than the own click, a navigation with a
+  competing signal, or a `disableHosts` host. Session records now track every
+  contributing policy (`SessionRecord.policyIds`); records saved before that are
+  never lifted. The relay capture reports own clicks as policy ids only (no
+  values) when its own `selfClickLift` is on.
+
+- `sessionKey?: (url) => string | undefined` on `StanddownSession` and the
+  adapters, plus `StanddownSession.resolveSessionKey()`: share one session across
+  a merchant's hosts (`www.`, `checkout.`, alternate ccTLDs). Defaults to the
+  landing hostname. (#60)
+
+### Changed
+
+- **Landing param names match case-insensitively** (`cjevent`, `CJEVENT`,
+  `CjEvent`); values and own-click `selfPatterns` stay exact. `lintPolicies` warns
+  on a landing name listed in two casings. (#62)
+- **`cjPolicy` no longer stands down on the `cje` / `cjevent_dc` cookies**
+  (policy version 0.2.0). CJ's software policy names only CJ domains, `afsrc=1`
+  and `cjevent` as evidence of a prior referral, and CJ's `cje` cookie lasts 13
+  months from its last update, so its presence mostly hid the host on visits
+  nobody referred. A referral param the shop strips before `document_idle` is now
+  caught by `standdown/relay` instead. `cjPolicy.detection.cookiePatterns` stays as an
+  empty list, so code that reads or overrides it keeps type-checking. Hosts that still want a CJ cookie rule can
+  add one to their own policy copy. Rakuten's `lsclick_mid` rule is unchanged:
+  Rakuten's policy explicitly requires standing down on it.
+
+### Fixed
+
+- A session self-exemption's `expiresAt` now survives a persisted reload, so its
+  TTL is enforced with `SessionStorageStateStore` and the persisted-envelope
+  stores. (#59)
+- `POLICIES.md` listed CJ's minimum as 30 minutes; the policy has always used 60.
+- A `session-or-min` stand-down's minimum (CJ: 60 minutes) now counts from the
+  **latest** referral rather than the first, when a persistent store carries it
+  across a browser restart. A shopper referred at 2:00 and again at 2:50 who
+  restarts the browser at 3:10 stays stood down until 3:50; before, the
+  stand-down was dropped at 3:00. Plain browsing still never extends it.
+
 ## 0.3.3 - 2026-07-14
 
 Hardening for `selfExemptionScope: 'session'`, closing the last item of the

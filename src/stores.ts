@@ -294,9 +294,12 @@ export function dropSessionBoundRecords(
   const next = cloneState(state);
 
   for (const [host, record] of Object.entries(next.sessions)) {
+    // The floor counts from the latest referral: for session-or-min records
+    // lastActivityAt only moves when a new referral matches (recordActivity
+    // leaves it alone), so browsing alone never extends it.
     if (
       record.sessionRule === 'session-or-min' &&
-      now >= record.startedAt + record.minDurationMs
+      now >= Math.max(record.startedAt, record.lastActivityAt) + record.minDurationMs
     ) {
       delete next.sessions[host];
     }
@@ -427,6 +430,9 @@ function parseSessionRecord(value: unknown): SessionRecord {
     minDurationMs,
     inactivityMs,
     behaviors,
+    policyIds,
+    lastReferralAt,
+    disabledHost,
   } = value;
 
   if (
@@ -439,7 +445,11 @@ function parseSessionRecord(value: unknown): SessionRecord {
     typeof minDurationMs !== 'number' ||
     (inactivityMs !== undefined && typeof inactivityMs !== 'number') ||
     !Array.isArray(behaviors) ||
-    !behaviors.every(isBehavior)
+    !behaviors.every(isBehavior) ||
+    (policyIds !== undefined &&
+      (!Array.isArray(policyIds) || !policyIds.every((id) => typeof id === 'string'))) ||
+    (lastReferralAt !== undefined && typeof lastReferralAt !== 'number') ||
+    (disabledHost !== undefined && disabledHost !== true)
   ) {
     throw new Error('invalid session record');
   }
@@ -460,6 +470,18 @@ function parseSessionRecord(value: unknown): SessionRecord {
 
   if (inactivityMs !== undefined) {
     record.inactivityMs = inactivityMs;
+  }
+
+  if (policyIds !== undefined) {
+    record.policyIds = [...policyIds];
+  }
+
+  if (lastReferralAt !== undefined) {
+    record.lastReferralAt = lastReferralAt;
+  }
+
+  if (disabledHost === true) {
+    record.disabledHost = true;
   }
 
   return record;
@@ -546,6 +568,18 @@ function cloneSessionRecord(record: SessionRecord): SessionRecord {
     next.inactivityMs = record.inactivityMs;
   }
 
+  if (record.policyIds !== undefined) {
+    next.policyIds = [...record.policyIds];
+  }
+
+  if (record.lastReferralAt !== undefined) {
+    next.lastReferralAt = record.lastReferralAt;
+  }
+
+  if (record.disabledHost === true) {
+    next.disabledHost = true;
+  }
+
   return next;
 }
 
@@ -590,9 +624,10 @@ function cloneAuditEntry(entry: AuditEntry): AuditEntry {
   return next;
 }
 
-function chromeGet(
+/** @internal Promise wrapper over a callback-or-promise chrome storage area. */
+export function chromeGet(
   storage: ChromeStorageAreaLike,
-  key: string,
+  key: string | null,
   runtime: ChromeRuntimeLike | undefined,
 ): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
@@ -617,7 +652,8 @@ function chromeGet(
   });
 }
 
-function chromeSet(
+/** @internal */
+export function chromeSet(
   storage: ChromeStorageAreaLike,
   items: Record<string, unknown>,
   runtime: ChromeRuntimeLike | undefined,
@@ -625,6 +661,42 @@ function chromeSet(
   return new Promise((resolve, reject) => {
     try {
       const result = storage.set(items, () => {
+        const error = runtime?.lastError;
+
+        if (error !== undefined) {
+          reject(new Error(error.message ?? 'chrome storage error'));
+          return;
+        }
+
+        resolve();
+      });
+
+      if (isPromiseLike(result)) {
+        result.then(resolve, reject);
+      }
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/** @internal */
+export function chromeRemove(
+  storage: ChromeStorageAreaLike,
+  keys: string | string[],
+  runtime: ChromeRuntimeLike | undefined,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (storage.remove === undefined) {
+      // No remove(): overwrite with null rather than silently keeping the value
+      // (a stale relay record could replay an old referral or own click).
+      const cleared = Object.fromEntries((Array.isArray(keys) ? keys : [keys]).map((key) => [key, null]));
+      chromeSet(storage, cleared, runtime).then(resolve, reject);
+      return;
+    }
+
+    try {
+      const result = storage.remove(keys, () => {
         const error = runtime?.lastError;
 
         if (error !== undefined) {

@@ -49,6 +49,39 @@ describe('StateStore implementations', () => {
     });
   });
 
+  it('measures the min-duration floor from the latest referral, not the first', async () => {
+    // Referral at 0, another referral at 50 min (lastActivityAt), browser restart
+    // at 70 min: the 60-min floor counts from 50 min, so the stand-down holds
+    // until 110 min.
+    const rearmed = (): StanddownState => ({
+      sessions: {
+        'session.example': {
+          advertiserHost: 'session.example',
+          policyId: 'test-session',
+          startedAt: 0,
+          lastActivityAt: 3_000_000,
+          sessionRule: 'session-or-min',
+          minDurationMs: 3_600_000,
+          behaviors: ['suppress-prompts'],
+        },
+      },
+      auditLog: [],
+    });
+    const reload = async (now: number) => {
+      const local = new FakeChromeStorageArea();
+      await new ChromeLocalStateStore(local, { sessionId: 'browser-session-1', now: () => 0 }).save(
+        rearmed(),
+      );
+      return new ChromeLocalStateStore(local, { sessionId: 'browser-session-2', now: () => now }).load();
+    };
+
+    expect((await reload(4_200_000))?.sessions['session.example']).toMatchObject({
+      policyId: 'test-session',
+    });
+    expect((await reload(6_599_999))?.sessions['session.example']).toBeDefined();
+    expect((await reload(6_600_000))?.sessions['session.example']).toBeUndefined();
+  });
+
   it('treats missing chrome session identity as same-session', async () => {
     const local = new FakeChromeStorageArea();
     await new ChromeLocalStateStore(local, { now: () => 0 }).save(

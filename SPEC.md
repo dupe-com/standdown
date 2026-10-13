@@ -76,8 +76,10 @@ expire on a timer. `minDurationMs` therefore expresses an intended *floor*, not 
 ceiling: `0` means "session-only, no extra minimum" and any positive value
 documents a minimum the integrator wants honored across session boundaries. That
 floor is only enforced as real elapsed time when a **persistent** store
-(`ChromeLocalStateStore`) carries the record past a session; with a
-session-scoped store the stand-down simply ends with the session. `inactivity-window`
+(`ChromeLocalStateStore`) carries the record past a session, and it counts from
+the **latest referral** (`max(startedAt, lastActivityAt) + minDurationMs`): each
+new matching landing re-arms it, while plain browsing (`recordActivity`) never
+moves it. With a session-scoped store the stand-down simply ends with the session. `inactivity-window`
 is the rule that computes a timed expiry (`max(startedAt + minDurationMs,
 lastActivityAt + inactivityMs)`).
 
@@ -109,10 +111,12 @@ class StanddownSession {
     auditLog?: boolean
     selfExemptionScope?: 'policy' | 'session'
     sessionKey?: (url: string) => string | undefined        // state bucket; defaults to the landing hostname
+    selfClickLift?: 'off' | 'same-network'   // default 'off'; see "Own-click lift"
   })
   async ingest(signals: Signals, policies: StanddownPolicy[]): Promise<Decision>
   resolveSessionKey(url: string): string | undefined              // the key ingest files state under
   async shouldStandDown(advertiserHost: string, now: number): Promise<Decision>
+  async liftForSelfClick(input: { url, policyIds, clickAt, now }, policies): Promise<boolean> // selfClickLift only
   async recordActivity(now: number): Promise<void>               // feeds inactivity windows
   async exportAuditLog(): Promise<AuditEntry[]>
 }
@@ -157,6 +161,56 @@ host still stands down); it never lifts an already-active stand-down (no
 exemption is recorded while one is active — monotone toward suppression); and a
 `disableHosts` match is never exempted.
 
+### Own-click lift (`selfClickLift`, opt-in)
+
+**In short:** off by default. When on, a shopper who clicks the integrator's
+own link on the same network ends that network's earlier stand-down, because
+the network now credits the integrator's click.
+
+Rationale: networks credit the most recent click (CJ: "each new cjevent value
+overwrites the existing cookie so the most recent click is credited",
+https://docs.cj.com/docs/http-cookie). Once the shopper's latest click on a
+network is the integrator's own, standing down for an earlier competitor on that
+same network protects nobody. A different network's attribution is not moved by
+that click, so it is never lifted.
+
+With `selfClickLift: 'same-network'`, a scoped `selfPatterns` match on the
+current navigation deletes the session record it is filed under (the
+`sessionKey` bucket, else the host), decision reason
+`self-click-lifted`, only when **all** hold:
+
+- the navigation is a fresh click: `Signals.selfClickAt` is set (adapters set it
+  only for a fresh navigation, never a reload, back/forward or re-check of a URL
+  still carrying the own param) and the lift compares against it, clamped to
+  `now`;
+- the own click's scoped patterns name exactly one network (the catch-all
+  `universal` network aside). A click matching patterns for two networks, such as
+  a marker shared across networks or one scoped to every policy reading the
+  shared `afsrc=1`, only exempts;
+- every policy that fed the record (`SessionRecord.policyIds`) is the own
+  click's policy or on its network (a record written before `policyIds` existed
+  is never lifted);
+- the record's latest referral (`max(startedAt, lastActivityAt)`) is strictly
+  older than the own click;
+- nothing else matched this navigation (a competing param, cookie or redirect
+  blocks it);
+- no `disableHosts` match ever fed the record (`SessionRecord.disabledHost`,
+  sticky across a `sessionKey` bucket) or covers the current host, and the
+  `universal` catch-all didn't feed it (its `afsrc=1` names no network).
+
+The latest referral is `SessionRecord.lastReferralAt` (falling back to
+`max(startedAt, lastActivityAt)`), which `recordActivity` never moves.
+
+The lift runs before session-exemption bookkeeping, so with `selfExemptionScope:
+'session'` the own click's exemption is then recorded as usual (its lingering
+cookie doesn't re-arm the stand-down). A later competitor referral stands down
+again as normal. `liftForSelfClick()` applies the same rules for an own click
+seen on an earlier page (used by `standdown/relay`, whose capture reports own
+clicks as policy ids only when its own `selfClickLift` matches the background's).
+The relay counts an own click only when it is in the page's own URL at
+`document_start`: never from a referrer, and never from the page-writable
+`sessionStorage` copy, so a planted or stale record can't lift a stand-down.
+
 ### webext adapter
 
 `createStanddown({ policies, selfPatterns, refresh? })` in the background service worker:
@@ -175,7 +229,7 @@ Every pack entry carries `metadata.sourceUrl` + `lastVerified: '2026-07-10'`. Se
 
 | Pack | Landing params | Redirect domains | Cookies | Stand-down | Activation |
 |---|---|---|---|---|---|
-| `cj` | `cjevent`; corroborating: `cjdata`, `utm_source=cj`, `sf_cs=cj`; `afsrc=1` | dpbolvw.net, anrdoezrs.net, jdoqocy.com, kqzyfj.com, tkqlhce.com, qksrv.net, awltovhc.com, lduhtrp.net (+ full ~21 from Pie list) | `cje`, `cjevent_dc` (substring) | session-or-min 60m | user-click |
+| `cj` | `cjevent`; corroborating: `cjdata`, `utm_source=cj`, `sf_cs=cj`; `afsrc=1` | dpbolvw.net, anrdoezrs.net, jdoqocy.com, kqzyfj.com, tkqlhce.com, qksrv.net, awltovhc.com, lduhtrp.net (+ full ~21 from Pie list) | — (none; see POLICIES.md) | session-or-min 60m | user-click |
 | `impact` | `afsrc=1` (canonical), `irclickid` | (per-merchant) | `im_ref` (substring) | session-only | user-click |
 | `rakuten` | `ranMID`+`ranEAID`+`ranSiteID` OR-groups `siteID` | click.linksynergy.com, linksynergy.* | `lsclick_mid*`, `*linkshare*` (substring) | session-only | user-click |
 | `awin` | `awc`; corroborating `utm_source=aw`, `source=aw` | awin1.com | — | session-or-min | user-click |

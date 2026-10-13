@@ -56,6 +56,16 @@
       "import": "./dist/url.mjs",
       "require": "./dist/url.cjs"
     },
+    "./relay/capture": {
+      "types": "./dist/relay/capture.d.ts",
+      "import": "./dist/relay/capture.mjs",
+      "require": "./dist/relay/capture.cjs"
+    },
+    "./relay/background": {
+      "types": "./dist/relay/background.d.ts",
+      "import": "./dist/relay/background.mjs",
+      "require": "./dist/relay/background.cjs"
+    },
     "./package.json": "./package.json"
   },
   "main": "./dist/index.cjs",

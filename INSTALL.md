@@ -31,6 +31,7 @@ published, with types included. Extension contexts need a bundler (see
 | `standdown/webext` | Manifest V3 background/service-worker adapter |
 | `standdown/content` | Content-script signal collector and evaluator |
 | `standdown/url` | URL-only decision helper for background/side-panel contexts (no live page) |
+| `standdown/relay/capture` + `standdown/relay/background` | Early landing capture at `document_start`, decided in the background, without `webNavigation` |
 
 ## Choosing an adapter
 
@@ -43,6 +44,32 @@ that can't hold (or add) `webNavigation`/`webRequest` must use `content`.
 | MV3 **without** those permissions, or that can't add them, or whose detection already runs in a content script | `standdown/content` |
 | Safari, or any page-/content-script-only context | `standdown/content` |
 | A background worker or native side panel deciding from a **tab's URL** (no live page, no `document`, no first-party cookies) | `standdown/url` |
+| MV3 **without** `webNavigation`, on shops that strip referral params before `document_idle` | `standdown/relay` (capture + background) |
+
+**What each adapter can see**, from most to least permission:
+
+| | `webext` | `relay` | `content` |
+| --- | --- | --- | --- |
+| Extra permissions | `webNavigation` (+ optional `webRequest`) | none beyond host access + `storage` | none |
+| Install warning | "Read your browsing history" | none new | none |
+| Runs in | background | `document_start` capture + background | content script at `document_idle` |
+| Param the shop strips before idle | ✅ | ✅ | ❌ |
+| Same-site / `link.` → `www.` script forward | ✅ | ✅ (within `hopWindowMs`) | ❌ |
+| A param removed **by the shop's server** (a redirect before any page loads) | ✅ with `webRequest` | ❌ | ❌ |
+| First-party cookie names | ❌ | ❌ | ✅ |
+
+That ❌ is narrower than it looks. A normal affiliate click *does* redirect
+through the network's servers, but it lands on the shop with the param still in
+the URL (`?cjevent=abc`), and the relay reads that landing page. The relay only
+misses a flow where the param never reaches a loaded page: the shop's own server
+reads it and redirects to a clean URL before anything renders, or a redirect
+hop sets attribution without passing a param on. `e2e/run.mjs` asserts this
+limit so it stays documented.
+
+In short: `relay` is the low-permission middle option. It catches what `content`
+misses on shops that strip the param, without the install warning `webext`
+needs. A host can run `relay` and `content` side by side if it also wants cookie
+rules (Rakuten's `lsclick_mid`).
 
 `createStanddown()` (the `webext` adapter) **requires** `chrome.webNavigation.onCommitted`
 and throws if it's absent — an adapter that observes no navigations would fail
@@ -197,6 +224,116 @@ State defaults to an in-memory store (fitting a stateless worker); pass a durabl
 `collectUrlSignals(url, opts)` is exported if you want to drive
 `StanddownSession.ingest` yourself.
 
+## Relay adapter
+
+Some shops strip the referral param (`?cjevent=abc`) with `history.replaceState`,
+or forward to a clean URL by script, before `document_idle`. A content script
+that reads `location` at idle then sees a clean URL and reports "not referred".
+`webext` would see the param, but needs `webNavigation`. The relay closes that
+gap with no new permission: a tiny `document_start` capture plus a background
+decision.
+
+**Manifest** (nothing beyond host access you already have and `storage`):
+
+```json
+{
+  "permissions": ["storage"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["<your existing host matches>"],
+      "js": ["relay-capture.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}
+```
+
+**`relay-capture.js`** (bundle it; keep it to this):
+
+```ts
+import { allPolicies } from 'standdown/policies';
+import { captureLanding } from 'standdown/relay/capture';
+
+captureLanding({
+  policies: allPolicies,
+  selfPatterns: [{ name: 'my_click_id', networkId: 'cj' }],
+});
+```
+
+**Background:**
+
+```ts
+import { allPolicies } from 'standdown/policies';
+import { createRelayStanddown } from 'standdown/relay/background';
+
+const relay = createRelayStanddown({
+  policies: allPolicies,
+  selfPatterns: [{ name: 'my_click_id', networkId: 'cj' }],
+  publisherSites: ['your-site.com'],
+});
+```
+
+**Query** from any content script (the tab comes from `sender.tab.id`):
+
+```ts
+import { shouldStandDownMessage } from 'standdown/relay/capture';
+
+const { decision } = await chrome.runtime.sendMessage(shouldStandDownMessage(location.href));
+if (decision.standDown) return; // decision.matchKind === 'landing' when the param was stripped
+```
+
+Use `shouldStandDownMessage()` rather than a literal. Its `timestamp` (also on the
+capture's own message) keeps message routers that throw on, and *answer*, any
+runtime message without a `type` and numeric `timestamp` from replying before the
+relay does. `@webext-core/messaging`, common in WXT extensions, is one: without
+the timestamp its error reply wins, and every query fails closed.
+
+What happens:
+
+- **Capture** reads `location.href` and `document.referrer` before page scripts
+  run, matches each policy's `landingParams` (values are compared in the page,
+  so `equals` rules and your own-click `selfPatterns` work), and keeps only
+  `{ v, host, at, matches: [{ policyId, params: [names] }] }` — never a URL, a
+  path, or a param value. It mirrors that to `sessionStorage` (survives a
+  same-tab reload) and sends it to the background, retrying once if the worker
+  isn't listening yet. The referrer counts only when it is on the same base
+  domain (a same-origin script forward keeps the full referrer) or a tracking host.
+- **Background** keys records by `sender.tab.id` (top frame only) in
+  `chrome.storage.session`, deletes them on `tabs.onRemoved`, and answers by
+  replaying the matched param names into the regular `StanddownSession`, so
+  session rules, self-exemption and `disableHosts` behave exactly as elsewhere.
+  A stand-down caused by a param no longer in the URL carries
+  `matchKind: 'landing'`.
+- **Cross-host forwards** (`link.shop.example?cjevent=abc` → script →
+  `www.shop.example`) carry over in the same tab when the next page arrives within
+  `hopWindowMs` and the earlier host shares the base domain or matches a
+  `trackingHosts` rule (on the policy's `detection.trackingHosts`, or the
+  `trackingHosts` option). A param seen on an unrelated site does not carry over;
+  landing on an unrelated site drops the record.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `maxAgeMs` | 30 min | How long a landing record counts. It also ends when the tab moves to an unrelated site or closes. |
+| `hopWindowMs` | 10 s | How soon a forward to another same-base / tracking host must land to carry the record. |
+| `trackingHosts` | `[]` | Extra `DomainRule`s on top of each policy's `detection.trackingHosts` (empty in bundled policies). |
+| `baseDomain` | 2–3 label heuristic | Swap in a public-suffix-list function if you need exact registrable domains. |
+| `store` | `ChromeLocalStateStore` | Decision state, as for `webext`. |
+
+Permissions: host access you already have and `storage`. It does **not** use
+`webNavigation`, `webRequest`, `tabs` or `scripting`; `sender.tab.id` and
+`tabs.onRemoved` need none of them.
+
+Known limits:
+
+- **Server-side redirect hops** load no page, so nothing in the page can see
+  them. Only `webext` with `webRequest` observes those.
+- URL fragment (`#…`) params are not read.
+- Like `content`, a non-stand-down still carries `degraded: true`.
+- The capture only sees pages your content script matches; on other sites,
+  "moved to an unrelated site" is not observed and `maxAgeMs` bounds the record.
+
 ## Core usage
 
 For non-extension or custom hosts, drive the session and guard directly:
@@ -251,6 +388,112 @@ It is deliberately **network-precise, not host-blanket**, and monotone:
   exemption is even recorded while a stand-down is active).
 - A `disableHosts` match is immune — a hard-disabled host stands down regardless
   of any exemption.
+
+### Letting your own click end an earlier stand-down (`selfClickLift`)
+
+**In short:** off by default. Turn it on and, when a shopper clicks *your* link
+on a network after a competitor's link on that same network, the stand-down for
+the competitor ends, because the network now credits your click.
+
+```ts
+createContentStanddown({ policies, selfPatterns, selfClickLift: 'same-network' });
+// relay: set it on BOTH halves, like selfPatterns
+captureLanding({ policies, selfPatterns, selfClickLift: 'same-network' });
+createRelayStanddown({ policies, selfPatterns, selfClickLift: 'same-network' });
+```
+
+It only lifts when it is safe:
+
+- **Same network only.** Your CJ click ends a CJ stand-down, never an Impact or
+  Rakuten one. Scope one `selfPatterns` entry per network you're on.
+- **Only an older referral.** A competitor click *after* yours (in any tab) keeps
+  the stand-down.
+- **Never a mixed one.** If several networks fed the stand-down, it stays.
+- **Never with a competing signal** on the same page, and never on a
+  `disableHosts` host.
+
+Decisions it lifts carry `reason: 'self-click-lifted'` in the audit log.
+
+Only a **fresh navigation** counts as a click. A reload, back/forward or SPA
+re-check of a URL that still carries your param is not a new click (the shopper
+may have clicked a competitor's link since), so it exempts but never lifts. The
+`content`, `webext` and `relay` adapters handle this for you. If you call
+`StanddownSession.ingest()` directly, pass `selfClickAt` (when the click
+landed) for fresh navigations only. `standdown/url` has no navigation events,
+so it doesn't offer the lift.
+
+#### What the shopper sees
+
+Nothing changes for the shopper; this is host configuration. A typical visit:
+
+1. 2:00 — the shopper clicks a competitor's CJ link to `shop.example`. Your
+   extension stands down (CJ: for the session, at least 60 minutes).
+2. 2:10 — still shopping, the shopper clicks **your** CJ link to the same shop.
+   CJ now credits your click, so with `selfClickLift` on the stand-down ends and
+   your extension may activate again (still behind your usual user-click rules).
+3. 2:20 — they click a competitor's CJ link again. That is now the latest click,
+   so your extension stands down again.
+
+Had step 2 been your **Impact** link instead, nothing would lift: your Impact
+click doesn't move the CJ partner's credit.
+
+#### Setting up your own-click patterns, per network
+
+A pattern must match a param **value only your clicks carry**. A network's click
+ID alone can't tell your click from a competitor's (`cjevent`, `irclickid` and
+`awc` are per-click IDs, not publisher IDs), so don't scope a lift to those
+without a value that is yours.
+
+The most portable approach is a marker of your own: add a param to the
+**destination URL** of every affiliate link you build (the deep link's landing
+page), with a **different value per network**, for example
+`?my_click_id=_mybrand_cj` on CJ links. A deep link redirects to that URL, so the
+marker usually arrives on the landing page with the click (confirm with a real
+click, below). Then scope each value to its network:
+
+```ts
+const selfPatterns = [
+  // Your own marker, one value per network you send traffic through:
+  { name: 'my_click_id', value: '_mybrand_cj', match: 'equals', networkId: 'cj' },
+  { name: 'my_click_id', value: '_mybrand_impact', match: 'equals', networkId: 'impact' },
+  { name: 'my_click_id', value: '_mybrand_awin', match: 'equals', networkId: 'awin' },
+  // Where the network's own landing param already identifies you, you can use
+  // it instead (check a real landing URL from your own link first):
+  // CJ: PID is your publisher ID, but it reaches the landing page only where
+  // the merchant passes it through, so treat it as an extra, not the marker:
+  // { name: 'PID', value: 'YOUR_CJ_PID', match: 'equals', networkId: 'cj' },
+  // Rakuten: ranSiteID starts with your encrypted publisher ID.
+  { name: 'ranSiteID', value: 'YOUR_ENCRYPTED_ID-', match: 'contains', networkId: 'rakuten' },
+  // eBay Partner Network: campid is your campaign ID.
+  { name: 'campid', value: 'YOUR_CAMPAIGN_ID', match: 'equals', networkId: 'ebay-epn' },
+] as const;
+
+createContentStanddown({ policies, selfPatterns, selfClickLift: 'same-network' });
+```
+
+To find yours: click one of your own affiliate links for each network, copy the
+URL the shop's page lands on (before it strips anything, e.g. from the network's
+link tester or your browser's network log), and pick the param/value that would
+differ on a competitor's click. Then:
+
+- **One network per own click.** Use a different marker value per network. If one
+  click matches your patterns for two networks (say the same `_mybrand` scoped to
+  CJ and Awin), the library can't tell whose credit it moved: it still exempts
+  you, but never lifts. (The `universal` catch-all doesn't count as a network.)
+- **`afsrc=1` links.** CJ, Impact and the `universal` policy all read `afsrc=1`,
+  which says "some affiliate", not which one. If your links carry it, also scope
+  that link's marker to `impact` and `universal` (for a CJ link) so your own click
+  isn't stood down. Such a click names two networks, so it only exempts: the lift
+  doesn't apply to links carrying `afsrc=1`.
+- **Scope every pattern** with `networkId` (or `policyId`). An unscoped pattern
+  never exempts or lifts anything (see below).
+- **Prefer `equals` or a distinctive `contains` value.** A loose `contains` (e.g.
+  a short common string) could match a competitor's click and lift *their*
+  stand-down, which is a hijack. Own-click names match case-sensitively.
+- **Relay hosts:** pass the same `selfPatterns` and `selfClickLift` to both
+  `captureLanding()` and `createRelayStanddown()`.
+- Networks whose policy never activates (`amazon`) or with no click of yours
+  (`universal`, `afsrc=1`) need no pattern.
 
 ### A self-click param that clears every network
 

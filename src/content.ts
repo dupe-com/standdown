@@ -1,4 +1,5 @@
-import { StanddownSession } from './session';
+import { freshNavigationStart, type NavigationTimingLike } from './navigation';
+import { pickSessionOptions, StanddownSession } from './session';
 import {
   LocalStorageTtlStateStore,
   SessionStorageStateStore,
@@ -66,6 +67,11 @@ export interface CreateContentStanddownOptions {
    * through it too, so an argument-less read stays on the same bucket.
    */
   readonly sessionKey?: (url: string) => string | undefined;
+  /**
+   * Let the host's own click lift an active stand-down on the same network.
+   * Off by default. See `StanddownSession`'s `selfClickLift` for the rules.
+   */
+  readonly selfClickLift?: 'off' | 'same-network';
   readonly onDecision?: (decision: Decision, signals: Signals) => void;
 }
 
@@ -95,6 +101,7 @@ export interface ContentWindowLike {
   readonly localStorage?: WebStorageLike | undefined;
   readonly history?: ContentHistoryLike;
   readonly setTimeout?: (handler: () => void, timeout?: number) => unknown;
+  readonly performance?: NavigationTimingLike;
   addEventListener?(type: 'popstate', listener: () => void): void;
   removeEventListener?(type: 'popstate', listener: () => void): void;
 }
@@ -118,7 +125,7 @@ export function createContentStanddown(
   const windowLike = opts.window ?? currentWindow();
   const now = opts.now ?? Date.now;
   const store = opts.store ?? createContentStore(windowLike, opts, now);
-  const session = new StanddownSession(store, contentSessionOptions(opts));
+  const session = new StanddownSession(store, pickSessionOptions(opts));
 
   let disposed = false;
   let pending = false;
@@ -267,6 +274,15 @@ export function collectContentSignals(
     signals.publisherSites = opts.publisherSites;
   }
 
+  // For selfClickLift: when this document's (fresh) navigation started. Every
+  // re-check of the same document reports the same time, and a reload or
+  // back/forward reports none, so neither counts as a new own click.
+  const selfClickAt = freshNavigationStart(windowLike.performance);
+
+  if (selfClickAt !== undefined) {
+    signals.selfClickAt = selfClickAt;
+  }
+
   return signals;
 }
 
@@ -283,41 +299,6 @@ export function cookieNamesFromString(cookie: string): string[] {
     .filter((name) => name.length > 0);
 }
 
-function contentSessionOptions(
-  opts: CreateContentStanddownOptions,
-):
-  | {
-      auditLog?: boolean;
-      selfExemptionScope?: 'policy' | 'session';
-      sessionExemptionTtlMs?: number;
-      sessionKey?: (url: string) => string | undefined;
-    }
-  | undefined {
-  const sessionOpts: {
-    auditLog?: boolean;
-    selfExemptionScope?: 'policy' | 'session';
-    sessionExemptionTtlMs?: number;
-    sessionKey?: (url: string) => string | undefined;
-  } = {};
-
-  if (opts.auditLog !== undefined) {
-    sessionOpts.auditLog = opts.auditLog;
-  }
-
-  if (opts.selfExemptionScope !== undefined) {
-    sessionOpts.selfExemptionScope = opts.selfExemptionScope;
-  }
-
-  if (opts.sessionExemptionTtlMs !== undefined) {
-    sessionOpts.sessionExemptionTtlMs = opts.sessionExemptionTtlMs;
-  }
-
-  if (opts.sessionKey !== undefined) {
-    sessionOpts.sessionKey = opts.sessionKey;
-  }
-
-  return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;
-}
 
 function createContentStore(
   windowLike: ContentWindowLike | undefined,

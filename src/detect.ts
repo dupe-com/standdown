@@ -284,7 +284,7 @@ function kindPriority(kind: MatchedRule['kind']): number {
   return 4;
 }
 
-type ParamValues = (name: string) => readonly string[];
+export type ParamValues = (name: string) => readonly string[];
 
 /**
  * Landing-param lookup keyed by lowercased name: real landings carry the same
@@ -292,7 +292,7 @@ type ParamValues = (name: string) => readonly string[];
  * Only names are folded; values still compare exactly. Self-exemptions do not
  * use this lookup, so loosening detection can never widen an exemption.
  */
-function caseInsensitiveParams(params: URLSearchParams): ParamValues {
+export function caseInsensitiveParams(params: URLSearchParams): ParamValues {
   const byName = new Map<string, string[]>();
 
   for (const [name, value] of params) {
@@ -309,7 +309,7 @@ function caseInsensitiveParams(params: URLSearchParams): ParamValues {
   return (name) => byName.get(name.toLowerCase()) ?? [];
 }
 
-function exactParams(params: URLSearchParams): ParamValues {
+export function exactParams(params: URLSearchParams): ParamValues {
   return (name) => params.getAll(name);
 }
 
@@ -319,7 +319,7 @@ function paramRuleMatches(rule: ParamRule, params: ParamValues): boolean {
   );
 }
 
-function paramMatcherMatches(
+export function paramMatcherMatches(
   matcher: ParamMatcher,
   params: ParamValues,
 ): boolean {

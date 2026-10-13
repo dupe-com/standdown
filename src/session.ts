@@ -1,9 +1,10 @@
-import { classifyReferrer, detect } from './detect';
+import { classifyReferrer, detect, domainRuleMatchesUrl } from './detect';
 import type {
   AuditEntry,
   Decision,
   Detection,
   ExemptionRecord,
+  SelfExemptScope,
   SessionRecord,
   Signals,
   StanddownPolicy,
@@ -28,6 +29,39 @@ export class MemoryStateStore implements StateStore {
   }
 }
 
+/** Session options an adapter passes straight through to `StanddownSession`. */
+export interface AdapterSessionOptions {
+  readonly auditLog?: boolean;
+  readonly selfExemptionScope?: 'policy' | 'session';
+  readonly sessionExemptionTtlMs?: number;
+  readonly sessionKey?: (url: string) => string | undefined;
+  readonly selfClickLift?: 'off' | 'same-network';
+}
+
+// Every adapter-facing option, once. `satisfies` makes adding an option to
+// AdapterSessionOptions without listing it here a compile error, so no adapter
+// can silently drop a new option (the relay once missed `sessionKey` that way).
+const ADAPTER_SESSION_OPTION_KEYS = {
+  auditLog: true,
+  selfExemptionScope: true,
+  sessionExemptionTtlMs: true,
+  sessionKey: true,
+  selfClickLift: true,
+} as const satisfies Record<keyof AdapterSessionOptions, true>;
+
+/** The session options set on an adapter's options object, or `undefined` if none. */
+export function pickSessionOptions(opts: AdapterSessionOptions): AdapterSessionOptions | undefined {
+  const picked: Record<string, unknown> = {};
+
+  for (const key of Object.keys(ADAPTER_SESSION_OPTION_KEYS) as (keyof AdapterSessionOptions)[]) {
+    if (opts[key] !== undefined) {
+      picked[key] = opts[key];
+    }
+  }
+
+  return Object.keys(picked).length > 0 ? (picked as AdapterSessionOptions) : undefined;
+}
+
 export class StanddownSession {
   readonly #store: StateStore;
   readonly #auditLog: boolean;
@@ -35,6 +69,7 @@ export class StanddownSession {
   readonly #selfExemptionScope: 'policy' | 'session';
   readonly #sessionExemptionTtlMs: number;
   readonly #sessionKey: ((url: string) => string | undefined) | undefined;
+  readonly #selfClickLift: 'off' | 'same-network';
   readonly #readOnlyAuditLog: AuditEntry[] = [];
   #stateLock: Promise<unknown> = Promise.resolve();
 
@@ -85,6 +120,18 @@ export class StanddownSession {
        * key no broader than the advertiser whose attribution you control.
        */
       sessionKey?: (url: string) => string | undefined;
+      /**
+       * Whether the host's own click can lift an active stand-down. Off by
+       * default: a stand-down then holds for its whole session, whatever the
+       * shopper clicks next. `'same-network'` lifts it when a scoped
+       * `selfPatterns` match shows the shopper's LATEST click on that network is
+       * the host's own, which is when the network's own last-click rule has
+       * already moved the credit. It never lifts: another network's stand-down,
+       * a record any other network contributed to, a referral newer than the own
+       * click, a navigation that also carries a competing param, or a
+       * `disabled-host`. A later competitor referral stands down again.
+       */
+      selfClickLift?: 'off' | 'same-network';
     },
   ) {
     this.#store = store;
@@ -93,6 +140,7 @@ export class StanddownSession {
     this.#selfExemptionScope = opts?.selfExemptionScope ?? 'policy';
     this.#sessionExemptionTtlMs = opts?.sessionExemptionTtlMs ?? 1_800_000;
     this.#sessionKey = opts?.sessionKey;
+    this.#selfClickLift = opts?.selfClickLift ?? 'off';
   }
 
   async ingest(
@@ -145,6 +193,24 @@ export class StanddownSession {
     return this.#withState(signals.now, (state) => {
       pruneExpiredState(state, signals.now);
 
+      // Lift first, so a session-scope exemption for the own click is recorded
+      // below (none is recorded while a stand-down is active). Only when nothing
+      // else matched this navigation: a competing signal blocks the lift.
+      const lifted =
+        this.#selfClickLift === 'same-network' &&
+        signals.selfClickAt !== undefined &&
+        advertiserHost !== undefined &&
+        stateKey !== undefined &&
+        detection.strongest === undefined &&
+        liftSelfClick(
+          state,
+          stateKey,
+          advertiserHost,
+          detection.selfExemptScopes ?? [],
+          policies,
+          Math.min(signals.selfClickAt, signals.now),
+        );
+
       let effective = detection;
 
       if (this.#selfExemptionScope === 'session' && stateKey && advertiserHost) {
@@ -188,6 +254,7 @@ export class StanddownSession {
           effective.strongest.policyId,
           matchedPolicies,
           signals.now,
+          effective.matched.some((match) => match.kind === 'disabled-host'),
         );
 
         return {
@@ -195,6 +262,19 @@ export class StanddownSession {
             reason: effective.strongest.reason,
             referrerClass: classifyReferrer(signals, record.advertiserHost),
           }),
+          detection: effective,
+        };
+      }
+
+      if (lifted && advertiserHost) {
+        return {
+          decision: {
+            standDown: false,
+            reason: 'self-click-lifted',
+            behaviors: [],
+            referrerClass: classifyReferrer(signals, advertiserHost),
+            ...(signals.signalCoverage === 'partial' ? { degraded: true } : {}),
+          } satisfies Decision,
           detection: effective,
         };
       }
@@ -273,6 +353,55 @@ export class StanddownSession {
       normalizeHost(advertiserHost),
       { persist: false },
     );
+  }
+
+  /**
+   * Lift the stand-down on `url`'s host for an own click seen at `clickAt` on
+   * the given policies, when `selfClickLift` is on. For adapters that observe
+   * the own click on one page and decide on a later one (`standdown/relay`).
+   * Same rules as the in-`ingest` lift; only referrals strictly older than
+   * `clickAt` are lifted. Resolves `true` when a stand-down was lifted.
+   */
+  async liftForSelfClick(
+    input: { url: string; policyIds: readonly string[]; clickAt: number; now: number },
+    policies: readonly StanddownPolicy[],
+  ): Promise<boolean> {
+    const host = hostFromUrl(input.url);
+
+    if (this.#selfClickLift !== 'same-network' || host === undefined) {
+      return false;
+    }
+
+    // Same bucket ingest files under (sessionKey); undefined if the resolver threw.
+    const key = this.resolveSessionKey(input.url);
+
+    const scopes = policies
+      .filter((policy) => input.policyIds.includes(policy.id))
+      .map((policy) => ({ policyId: policy.id, networkId: policy.network.id }));
+    let lifted = false;
+
+    await this.#withState(
+      input.now,
+      (state) => {
+        pruneExpiredState(state, input.now);
+        lifted = key !== undefined && liftSelfClick(state, key, host, scopes, policies, input.clickAt);
+
+        return {
+          decision: {
+            standDown: !lifted,
+            reason: lifted ? 'self-click-lifted' : 'self-click-not-lifted',
+            behaviors: [],
+          } satisfies Decision,
+        };
+      },
+      // Audited as an ingest (a state change, reason says what happened): a new
+      // action name would make older releases reject the whole saved state on a
+      // rollback, and widen AuditEntry['action'] for hosts that switch on it.
+      'ingest',
+      key ?? normalizeHost(host),
+    );
+
+    return lifted;
   }
 
   async recordActivity(now: number): Promise<void> {
@@ -462,6 +591,7 @@ function upsertSessionRecord(
   primaryPolicyId: string,
   policies: readonly StanddownPolicy[],
   now: number,
+  viaDisabledHost = false,
 ): SessionRecord {
   const key = normalizeHost(stateKey);
   const existing = state.sessions[key];
@@ -486,6 +616,16 @@ function upsertSessionRecord(
       ...(existing?.behaviors ?? []),
       ...policies.flatMap((policy) => policy.standdown.behaviors),
     ]),
+    // A record from before this field existed has unknown contributors: mark
+    // it so it can never be lifted, rather than guess from its primary policy.
+    policyIds: [
+      ...new Set([
+        ...(existing ? (existing.policyIds ?? [UNKNOWN_CONTRIBUTORS]) : []),
+        ...policies.map((policy) => policy.id),
+      ]),
+    ],
+    lastReferralAt: now,
+    ...(existing?.disabledHost || viaDisabledHost ? { disabledHost: true as const } : {}),
   };
 
   if (sessionRule === 'inactivity-window') {
@@ -685,6 +825,87 @@ function unionBehaviors(behaviors: readonly SessionRecord['behaviors'][number][]
   return [...new Set(behaviors)];
 }
 
+/**
+ * Marks a session record whose contributing policies are unknown (saved before
+ * `policyIds` existed). Such a record is never lifted by `selfClickLift`.
+ */
+const UNKNOWN_CONTRIBUTORS = 'standdown:unknown-contributors';
+
+/** The bundled catch-all policy's network (`afsrc=1` from any network). */
+const UNIVERSAL_NETWORK_ID = 'universal';
+
+/**
+ * Delete the stand-down filed under `stateKey` (the real `host` decides
+ * `disableHosts`) when an own click at `clickAt` covers every policy
+ * that fed it (same policy, or same network) and the latest referral predates
+ * the click. Returns whether it deleted one.
+ */
+function liftSelfClick(
+  state: StanddownState,
+  stateKey: string,
+  host: string,
+  scopes: readonly SelfExemptScope[],
+  policies: readonly StanddownPolicy[],
+  clickAt: number,
+): boolean {
+  const key = normalizeHost(stateKey);
+  const record = state.sessions[key];
+
+  if (
+    !record ||
+    scopes.length === 0 ||
+    record.disabledHost === true ||
+    record.policyIds === undefined ||
+    record.policyIds.includes(UNKNOWN_CONTRIBUTORS)
+  ) {
+    return false;
+  }
+
+  // The own click must name exactly one network. A click that matches own-click
+  // patterns for two networks (a marker shared across networks, or one scoped
+  // to every policy reading the shared afsrc=1) can't say whose credit it
+  // moved, so it only exempts. The catch-all `universal` network doesn't count.
+  const ownNetworks = new Set(
+    scopes.map((scope) => scope.networkId).filter((id) => id !== UNIVERSAL_NETWORK_ID),
+  );
+
+  if (ownNetworks.size !== 1) {
+    return false;
+  }
+
+  // An unconditional disabled-host stand-down is never the shopper's to lift.
+  const disabled = policies.some(
+    (policy) =>
+      record.policyIds?.includes(policy.id) &&
+      (policy.detection.disableHosts ?? []).some((rule) =>
+        domainRuleMatchesUrl(rule, normalizeHost(host)),
+      ),
+  );
+
+  if (disabled) {
+    return false;
+  }
+
+  const networkOf = new Map(policies.map((policy) => [policy.id, policy.network.id]));
+
+  // A record the universal catch-all fed (afsrc=1, network unknown) can't be
+  // attributed to the own click's network, so it is never lifted.
+  if (record.policyIds.some((id) => networkOf.get(id) === UNIVERSAL_NETWORK_ID)) {
+    return false;
+  }
+  const covered = record.policyIds.every((id) =>
+    scopes.some((scope) => scope.policyId === id || scope.networkId === networkOf.get(id)),
+  );
+  const latestReferral = record.lastReferralAt ?? Math.max(record.startedAt, record.lastActivityAt);
+
+  if (!covered || latestReferral >= clickAt) {
+    return false;
+  }
+
+  delete state.sessions[key];
+  return true;
+}
+
 function activeDecisionForHost(
   state: StanddownState,
   advertiserHost: string,
@@ -819,6 +1040,7 @@ function cloneState(state: StanddownState): StanddownState {
         {
           ...record,
           behaviors: [...record.behaviors],
+          ...(record.policyIds ? { policyIds: [...record.policyIds] } : {}),
         },
       ]),
     ),
