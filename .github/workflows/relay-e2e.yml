@@ -1,0 +1,48 @@
+name: Relay browser check
+
+# Loads examples/relay-extension into real headless Chromium against local shop
+# pages that strip ?cjevent=abc, and checks the relay still stands down (plus the
+# restart-floor and own-click-lift cases). See examples/relay-extension/README.md.
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'examples/relay-extension/**'
+      - 'package.json'
+      - 'bun.lock'
+      - 'tsup.config.ts'
+      - 'audit/package.json'
+      - 'audit/package-lock.json'
+      - '.github/workflows/relay-e2e.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  relay-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install
+      - run: bun run build
+      # Playwright lives in the audit workspace; its full Chromium build loads
+      # extensions headless, so no xvfb is needed.
+      - name: Install Playwright Chromium
+        run: cd audit && npm install && npx playwright install --with-deps chromium
+      - name: Relay scenarios
+        run: node examples/relay-extension/e2e/run.mjs
+      - name: Session floor across browser restarts
+        run: node examples/relay-extension/e2e/run.mjs
+        env:
+          EXTRA_CASES: examples/relay-extension/e2e/cases/session-floor.mjs
+      - name: Own-click lift
+        run: node examples/relay-extension/e2e/run.mjs
+        env:
+          EXTRA_CASES: examples/relay-extension/e2e/cases/self-click-lift.mjs

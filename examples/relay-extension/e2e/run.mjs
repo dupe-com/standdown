@@ -102,7 +102,9 @@ const profile = mkdtempSync(join(tmpdir(), 'standdown-relay-e2e-profile-'));
 async function launch() {
   const context = await chromium.launchPersistentContext(profile, {
     headless: !process.env.HEADED,
-    ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+    // Without CHROMIUM_PATH, use Playwright's full Chromium build: unlike its
+    // default headless shell, it loads extensions headless (no xvfb needed).
+    ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : { channel: 'chromium' }),
     args: [
       `--disable-extensions-except=${ext}`,
       `--load-extension=${ext}`,

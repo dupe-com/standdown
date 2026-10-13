@@ -9,7 +9,8 @@ checks passed, one of which confirms a documented limit.
 - **Date:** 2026-10-13
 - **Build:** the `standdown/relay` branch on top of v0.3.3, built with `npm run build`
 - **Browser:** Chromium (Chrome for Testing) via Playwright, headless
-- **How to repeat:** `node examples/relay-extension/e2e/run.mjs` (see [README](./README.md))
+- **How to repeat:** `node examples/relay-extension/e2e/run.mjs` (see [README](./README.md)).
+  CI runs it on every relevant pull request (`.github/workflows/relay-e2e.yml`).
 
 ## Results
 

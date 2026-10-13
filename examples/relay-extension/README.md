@@ -56,6 +56,10 @@ npm run build
 node examples/relay-extension/e2e/run.mjs
 ```
 
+CI runs the same three suites on every pull request that touches `src/` or this
+example (`.github/workflows/relay-e2e.yml`), headless, with Playwright's own
+Chromium.
+
 Set `CHROMIUM_PATH` to reuse a Chromium you already have, `HEADED=1` to watch it,
 or `EXTRA_CASES=path/to/cases.mjs` to add your own pages and scenarios. A step
 can be `'RESTART'`, which closes and reopens the browser with the same profile.
