@@ -577,11 +577,11 @@ function upsertSessionRecord(
       ...(existing?.behaviors ?? []),
       ...policies.flatMap((policy) => policy.standdown.behaviors),
     ]),
-    // A record from before this field existed has unknown contributors; seeding
-    // with its primary policy keeps it attributable without guessing more.
+    // A record from before this field existed has unknown contributors: mark
+    // it so it can never be lifted, rather than guess from its primary policy.
     policyIds: [
       ...new Set([
-        ...(existing ? (existing.policyIds ?? [existing.policyId]) : []),
+        ...(existing ? (existing.policyIds ?? [UNKNOWN_CONTRIBUTORS]) : []),
         ...policies.map((policy) => policy.id),
       ]),
     ],
@@ -785,6 +785,12 @@ function unionBehaviors(behaviors: readonly SessionRecord['behaviors'][number][]
 }
 
 /**
+ * Marks a session record whose contributing policies are unknown (saved before
+ * `policyIds` existed). Such a record is never lifted by `selfClickLift`.
+ */
+const UNKNOWN_CONTRIBUTORS = 'standdown:unknown-contributors';
+
+/**
  * Delete the stand-down filed under `stateKey` (the real `host` decides
  * `disableHosts`) when an own click at `clickAt` covers every policy
  * that fed it (same policy, or same network) and the latest referral predates
@@ -801,7 +807,12 @@ function liftSelfClick(
   const key = normalizeHost(stateKey);
   const record = state.sessions[key];
 
-  if (!record || scopes.length === 0 || record.policyIds === undefined) {
+  if (
+    !record ||
+    scopes.length === 0 ||
+    record.policyIds === undefined ||
+    record.policyIds.includes(UNKNOWN_CONTRIBUTORS)
+  ) {
     return false;
   }
 

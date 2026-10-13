@@ -98,6 +98,30 @@ describe('selfClickLift', () => {
     ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
   });
 
+  it('a referral re-detected on a record saved before contributors were tracked still never lifts', async () => {
+    const store = new MemoryStateStore({
+      sessions: {
+        'merchant.example': {
+          advertiserHost: 'merchant.example',
+          policyId: 'cj',
+          startedAt: 0,
+          lastActivityAt: 0,
+          sessionRule: 'session-or-min',
+          minDurationMs: 3_600_000,
+          behaviors: ['suppress-prompts'],
+        },
+      },
+      auditLog: [],
+    });
+    const session = new StanddownSession(store, { selfClickLift: 'same-network' });
+    // Unknown history (Impact may have fed it too), then a fresh CJ referral.
+    await session.ingest({ url: `${shop}/?cjevent=abc`, now: 500 }, policies);
+
+    await expect(
+      session.ingest({ url: `${shop}/?cjevent=own`, now: 1_000, selfPatterns: ownCj }, policies),
+    ).resolves.toMatchObject({ standDown: true });
+  });
+
   it("with session scope, the lingering cookie our own Rakuten click set doesn't re-arm the lifted stand-down", async () => {
     const ownRakuten: SelfExemption[] = [
       { name: 'ranSiteID', value: 'own', match: 'equals', policyId: 'rakuten' },

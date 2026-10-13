@@ -194,6 +194,9 @@ cookie doesn't re-arm the stand-down). A later competitor referral stands down
 again as normal. `liftForSelfClick()` applies the same rules for an own click
 seen on an earlier page (used by `standdown/relay`, whose capture reports own
 clicks as policy ids only when its own `selfClickLift` matches the background's).
+The relay counts an own click only when it is in the page's own URL at
+`document_start`: never from a referrer, and never from the page-writable
+`sessionStorage` copy, so a planted or stale record can't lift a stand-down.
 
 ### webext adapter
 

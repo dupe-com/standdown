@@ -102,7 +102,10 @@ export function captureLanding(opts: CaptureLandingOptions): CaptureLandingResul
       const maxAgeMs = opts.maxAgeMs ?? DEFAULT_RELAY_MAX_AGE_MS;
 
       if (stored && stored.host === host && at - stored.at <= maxAgeMs) {
-        record = stored;
+        // Re-send its referral matches only. An own click counts only when seen
+        // live: sessionStorage is page-writable, and a stale own click must not
+        // override a newer referral the background has since recorded.
+        record = { v: 1, host: stored.host, at: stored.at, matches: stored.matches };
       } else if (stored) {
         win.sessionStorage?.removeItem(RELAY_SESSION_STORAGE_KEY);
       }

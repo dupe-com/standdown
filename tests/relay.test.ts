@@ -516,6 +516,62 @@ describe('relay: selfClickLift', () => {
     await expect(h.query('https://shop.example/', 2_500)).resolves.toMatchObject({ standDown: true });
   });
 
+  it('never trusts an own click read back from page-writable sessionStorage', async () => {
+    const h = lifting();
+    h.open('https://shop.example/?cjevent=someone-else', 1_000);
+    await h.flush();
+    await expect(h.query('https://shop.example/', 1_100)).resolves.toMatchObject({ standDown: true });
+
+    // A page script plants a fake "own click" record in sessionStorage.
+    const storage = new Map([
+      [
+        RELAY_SESSION_STORAGE_KEY,
+        JSON.stringify({ v: 1, host: 'shop.example', at: 1_500, matches: [], self: ['cj'] }),
+      ],
+    ]);
+    const page = h.open('https://shop.example/cart', 2_000, undefined, storage);
+    await h.flush();
+
+    expect(page.record).not.toHaveProperty('self');
+    await expect(h.query('https://shop.example/cart', 2_100)).resolves.toMatchObject({ standDown: true });
+  });
+
+  it("a stale own click re-sent from storage can't erase a newer competitor forward", async () => {
+    const h = lifting();
+    const www = new Map<string, string>();
+    // Our own click on www (mirrored to www's sessionStorage).
+    h.open('https://www.shop.example/?cjevent=own-click', 1_000, undefined, www);
+    // Later, a competitor's click lands on link.<shop> and forwards to www.
+    h.open('https://link.shop.example/go?cjevent=someone-else', 2_000);
+    h.open('https://www.shop.example/product', 2_500, 'https://link.shop.example/', www);
+    await h.flush();
+
+    await expect(h.query('https://www.shop.example/product', 2_600)).resolves.toMatchObject({
+      standDown: true,
+    });
+  });
+
+  it("an own click only counts in the page's own URL, not a later page's referrer", async () => {
+    const h = lifting();
+    // Our own click, then a competitor's CJ referral (another tab) is decided.
+    h.open('https://shop.example/?cjevent=own-click', 1_000);
+    await h.flush();
+    await h.relay.ingestCapture(
+      TAB + 1,
+      { v: 1, host: 'shop.example', at: 2_000, matches: [{ policyId: 'cj', params: ['cjevent'] }] },
+      2_000,
+    );
+    await h.relay.shouldStandDown(TAB + 1, 'https://shop.example/', 2_000);
+
+    // Back in our tab, the shopper clicks through; the full referrer still holds
+    // our param. That is not a new own click.
+    const next = h.open('https://shop.example/cart', 3_000, 'https://shop.example/?cjevent=own-click');
+    await h.flush();
+
+    expect(next.record).not.toHaveProperty('self');
+    await expect(h.query('https://shop.example/cart', 3_100)).resolves.toMatchObject({ standDown: true });
+  });
+
   it('reports the own click by policy id only, never the value', async () => {
     const h = lifting();
     h.open('https://shop.example/?cjevent=own-click&email=person@example.com', 1_000);
