@@ -1,0 +1,38 @@
+# Relay verification: local browser run
+
+**In short:** we loaded the relay example into a real Chromium and visited fake
+shop pages that remove `?cjevent=abc` from the address bar as they load. The
+existing `content` adapter said "not referred" every time. The relay correctly
+said "stand down" every time, and stayed quiet on visits nobody referred. All 9
+checks passed.
+
+- **Date:** 2026-10-13
+- **Build:** the `standdown/relay` branch on top of v0.3.3, built with `npm run build`
+- **Browser:** Chromium (Chrome for Testing) via Playwright, headless
+- **How to repeat:** `node examples/relay-extension/e2e/run.mjs` (see [README](./README.md))
+
+## Results
+
+| Scenario | `content` at idle | `relay` | Expected | |
+| --- | --- | --- | --- | --- |
+| Page strips `?cjevent=abc` with `replaceState` before load | not referred | stand down (`matchKind: 'landing'`) | stand down | ✅ |
+| Page strips `?cjevent=abc` with `pushState` just after load | not referred | stand down | stand down | ✅ |
+| `?utm_source=cj` stripped (CJ only when the value is `cj`) | not referred | stand down | stand down | ✅ |
+| `?utm_source=google` stripped | not referred | not referred | not referred | ✅ |
+| `link.shop.example?cjevent=abc` → script → `www.shop.example` | not referred | stand down | stand down | ✅ |
+| Plain visit, no referral | not referred | not referred | not referred | ✅ |
+| `?cjevent=abc` on an unrelated site, then the shop in the same tab | not referred | not referred | not referred | ✅ |
+| Reload after the param was stripped | not referred | stand down | stand down | ✅ |
+| Closed tabs leave no landing records behind | | 0 left | 0 | ✅ |
+
+## What this run does not cover
+
+- **Return visits on a later day.** The relay remembers a landing for one tab
+  (up to 30 minutes) and the engine remembers a stand-down for the browsing
+  session. Neither reaches a visit after the browser restarts. The relay does not
+  read cookies; a host that wants cookie evidence can also run `content`.
+- **Server-side redirect hops** and `#` fragment params (documented limits).
+- **Real shop sites and Safari.** These pages are local stand-ins built to
+  reproduce the stripping patterns.
+- **A real CJ click.** The `cjevent` value is a placeholder; the run checks
+  detection, not network-side attribution.

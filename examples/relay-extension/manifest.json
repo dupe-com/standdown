@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "standdown.js relay example",
+  "version": "0.1.0",
+  "description": "Minimal example using standdown/relay: a document_start capture plus a background decision. Holds no webNavigation/webRequest/tabs/scripting permission.",
+  "permissions": ["storage"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["relay-capture.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["offer.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
