@@ -57,6 +57,9 @@ const baseScenarios = [
   { name: 'clean visit, no referral (positive control)', steps: [u('s6.example', '/clean')], expect: { relay: false } },
   { name: 'param on unrelated site, then shop in same tab', steps: [u('other.example', '/clean?cjevent=abc'), u('s7.example', '/clean')], expect: { relay: false } },
   { name: 'reload after strip (sessionStorage mirror)', steps: [u('s8.example', '/strip?cjevent=abc'), 'RELOAD'], expect: { relay: true } },
+  // Known limit, asserted so it stays documented: a server-side 302 that drops
+  // the param before any page loads is invisible to relay and content alike.
+  { name: 'LIMIT: shop server 302s ?cjevent=abc away before any page loads -> not seen', steps: [u('s9.example', '/server-strip?cjevent=abc')], expect: { relay: false, content: false } },
 ];
 
 const extra = process.env.EXTRA_CASES
@@ -80,6 +83,13 @@ await build(join(here, 'probe.js'), 'probe.js', 'iife', {
 
 const server = http
   .createServer((req, res) => {
+    // /server-strip: the shop's SERVER reads the param and 302s to a clean URL
+    // before any page loads. Nothing in the page can see it (documented limit).
+    if (new URL(req.url, 'http://x').pathname === '/server-strip') {
+      res.writeHead(302, { location: '/clean' });
+      res.end();
+      return;
+    }
     const body = routes[new URL(req.url, 'http://x').pathname];
     res.writeHead(body ? 200 : 404, { 'content-type': 'text/html' });
     res.end(body ?? 'not found');

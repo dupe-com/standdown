@@ -179,6 +179,10 @@ current navigation deletes the session record it is filed under (the
 `sessionKey` bucket, else the host), decision reason
 `self-click-lifted`, only when **all** hold:
 
+- the own click's scoped patterns name exactly one network (the catch-all
+  `universal` network aside). A click matching patterns for two networks, such as
+  a marker shared across networks or one scoped to every policy reading the
+  shared `afsrc=1`, only exempts;
 - every policy that fed the record (`SessionRecord.policyIds`) is the own
   click's policy or on its network (a record written before `policyIds` existed
   is never lifted);

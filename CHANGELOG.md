@@ -26,7 +26,8 @@ New opt-in entry point. Nothing changes for hosts that don't use it.
   and every adapter, plus `StanddownSession.liftForSelfClick()`. When the
   shopper's latest click on a network is the host's own, that network's earlier
   stand-down ends (`reason: 'self-click-lifted'`), since the network now credits
-  that click. Never lifts another network's stand-down, a record several
+  that click. The own click must name exactly one network (use a distinct
+  own-click value per network). Never lifts another network's stand-down, a record several
   networks fed, a referral newer than the own click, a navigation with a
   competing signal, or a `disableHosts` host. Session records now track every
   contributing policy (`SessionRecord.policyIds`); records saved before that are

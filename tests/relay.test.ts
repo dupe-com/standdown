@@ -426,6 +426,89 @@ describe('relay: capture at document_start, decide in background', () => {
   });
 });
 
+describe('relay: failure and edge paths', () => {
+  it('accepts a top-frame capture through the runtime message listener', async () => {
+    const h = harness();
+    const record = { v: 1, host: 'shop.example', at: 1_000, matches: [{ policyId: 'cj', params: ['cjevent'] }] };
+
+    await expect(
+      h.chrome.runtime.onMessage.dispatch(
+        { type: 'standdown:relay:capture', record },
+        { tab: { id: TAB }, frameId: 0, url: 'https://shop.example/' },
+      ),
+    ).resolves.toEqual({ ok: true });
+    await expect(h.query('https://shop.example/', 1_100)).resolves.toMatchObject({ standDown: true });
+  });
+
+  it('fails closed when the per-tab landing store throws', async () => {
+    const h = harness();
+    h.sessionArea.get = () => {
+      throw new Error('storage gone');
+    };
+
+    await expect(h.query('https://shop.example/', 1_000)).resolves.toMatchObject({
+      standDown: true,
+      reason: 'relay-store-error',
+    });
+  });
+
+  it('fails closed when chrome.storage.local is unavailable', async () => {
+    const chrome = fakeChrome();
+    const relay = createRelayStanddown({
+      policies: [cjPolicy],
+      chrome: { ...chrome, storage: { session: chrome.storage.session } },
+      now: () => 0,
+    });
+
+    await expect(relay.shouldStandDown(TAB, 'https://shop.example/', 1_000)).resolves.toMatchObject({
+      standDown: true,
+    });
+  });
+
+  it('ignores garbage a page wrote into the sessionStorage slot', async () => {
+    const h = harness();
+    const storage = new Map([[RELAY_SESSION_STORAGE_KEY, '{not json']]);
+    const page = h.open('https://shop.example/', 1_000, undefined, storage);
+    await h.flush();
+
+    expect(page.record).toEqual({ v: 1, host: 'shop.example', at: 1_000, matches: [] });
+    await expect(h.query('https://shop.example/', 1_100)).resolves.toMatchObject({ standDown: false });
+  });
+
+  it("drops a stored record from another shop instead of re-sending it", async () => {
+    const h = harness();
+    const storage = new Map([
+      [
+        RELAY_SESSION_STORAGE_KEY,
+        JSON.stringify({ v: 1, host: 'other.example', at: 900, matches: [{ policyId: 'cj', params: ['cjevent'] }] }),
+      ],
+    ]);
+    const page = h.open('https://shop.example/', 1_000, undefined, storage);
+    await h.flush();
+
+    expect(page.record?.matches).toEqual([]);
+    expect(storage.has(RELAY_SESSION_STORAGE_KEY)).toBe(false);
+    await expect(h.query('https://shop.example/', 1_100)).resolves.toMatchObject({ standDown: false });
+  });
+
+  it("a fresh referral on a new shop replaces the previous shop's record", async () => {
+    const h = harness();
+    h.open('https://other.example/?cjevent=abc', 1_000);
+    h.open('https://shop.example/?cjevent=def', 60_000);
+    await h.flush();
+
+    await expect(h.relay.landingFor(TAB, 60_000)).resolves.toMatchObject({ host: 'shop.example' });
+    await expect(h.query('https://shop.example/', 60_100)).resolves.toMatchObject({ standDown: true });
+  });
+
+  it('ignores a malformed record passed straight to ingestCapture', async () => {
+    const h = harness();
+    await h.relay.ingestCapture(TAB, { v: 2, host: 'shop.example' } as never, 1_000);
+
+    await expect(h.relay.landingFor(TAB, 1_000)).resolves.toBeUndefined();
+  });
+});
+
 describe('relay: selfClickLift', () => {
   const selfPatterns: SelfExemption[] = [
     { name: 'cjevent', value: 'own-click', match: 'equals', networkId: 'cj' },

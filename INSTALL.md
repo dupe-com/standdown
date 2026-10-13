@@ -55,8 +55,16 @@ that can't hold (or add) `webNavigation`/`webRequest` must use `content`.
 | Runs in | background | `document_start` capture + background | content script at `document_idle` |
 | Param the shop strips before idle | ✅ | ✅ | ❌ |
 | Same-site / `link.` → `www.` script forward | ✅ | ✅ (within `hopWindowMs`) | ❌ |
-| Server-side redirect chain (e.g. through a network's click domain) | ✅ with `webRequest` | ❌ | ❌ |
+| A param removed **by the shop's server** (a redirect before any page loads) | ✅ with `webRequest` | ❌ | ❌ |
 | First-party cookie names | ❌ | ❌ | ✅ |
+
+That ❌ is narrower than it looks. A normal affiliate click *does* redirect
+through the network's servers, but it lands on the shop with the param still in
+the URL (`?cjevent=abc`), and the relay reads that landing page. The relay only
+misses a flow where the param never reaches a loaded page: the shop's own server
+reads it and redirects to a clean URL before anything renders, or a redirect
+hop sets attribution without passing a param on. `e2e/run.mjs` asserts this
+limit so it stays documented.
 
 In short: `relay` is the low-permission middle option. It catches what `content`
 misses on shops that strip the param, without the install warning `webext`
@@ -425,17 +433,17 @@ without a value that is yours.
 
 The most portable approach is a marker of your own: add a param to the
 **destination URL** of every affiliate link you build (the deep link's landing
-page), for example `?my_click_id=_mybrand`. A deep link redirects to that URL,
-so the marker usually arrives on the landing page with the click, whatever the
-network (confirm with a real click, below). Then scope one pattern per network
-you're on:
+page), with a **different value per network**, for example
+`?my_click_id=_mybrand_cj` on CJ links. A deep link redirects to that URL, so the
+marker usually arrives on the landing page with the click (confirm with a real
+click, below). Then scope each value to its network:
 
 ```ts
 const selfPatterns = [
-  // Your own marker, on each network you send traffic through:
-  { name: 'my_click_id', value: '_mybrand', match: 'contains', networkId: 'cj' },
-  { name: 'my_click_id', value: '_mybrand', match: 'contains', networkId: 'impact' },
-  { name: 'my_click_id', value: '_mybrand', match: 'contains', networkId: 'awin' },
+  // Your own marker, one value per network you send traffic through:
+  { name: 'my_click_id', value: '_mybrand_cj', match: 'equals', networkId: 'cj' },
+  { name: 'my_click_id', value: '_mybrand_impact', match: 'equals', networkId: 'impact' },
+  { name: 'my_click_id', value: '_mybrand_awin', match: 'equals', networkId: 'awin' },
   // Where the network's own landing param already identifies you, you can use
   // it instead (check a real landing URL from your own link first):
   // Rakuten: ranSiteID starts with your encrypted publisher ID.
@@ -452,6 +460,15 @@ URL the shop's page lands on (before it strips anything, e.g. from the network's
 link tester or your browser's network log), and pick the param/value that would
 differ on a competitor's click. Then:
 
+- **One network per own click.** Use a different marker value per network. If one
+  click matches your patterns for two networks (say the same `_mybrand` scoped to
+  CJ and Awin), the library can't tell whose credit it moved: it still exempts
+  you, but never lifts. (The `universal` catch-all doesn't count as a network.)
+- **`afsrc=1` links.** CJ, Impact and the `universal` policy all read `afsrc=1`,
+  which says "some affiliate", not which one. If your links carry it, also scope
+  that link's marker to `impact` and `universal` (for a CJ link) so your own click
+  isn't stood down. Such a click names two networks, so it only exempts: the lift
+  doesn't apply to links carrying `afsrc=1`.
 - **Scope every pattern** with `networkId` (or `policyId`). An unscoped pattern
   never exempts or lifts anything (see below).
 - **Prefer `equals` or a distinctive `contains` value.** A loose `contains` (e.g.

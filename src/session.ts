@@ -790,6 +790,9 @@ function unionBehaviors(behaviors: readonly SessionRecord['behaviors'][number][]
  */
 const UNKNOWN_CONTRIBUTORS = 'standdown:unknown-contributors';
 
+/** The bundled catch-all policy's network (`afsrc=1` from any network). */
+const UNIVERSAL_NETWORK_ID = 'universal';
+
 /**
  * Delete the stand-down filed under `stateKey` (the real `host` decides
  * `disableHosts`) when an own click at `clickAt` covers every policy
@@ -813,6 +816,18 @@ function liftSelfClick(
     record.policyIds === undefined ||
     record.policyIds.includes(UNKNOWN_CONTRIBUTORS)
   ) {
+    return false;
+  }
+
+  // The own click must name exactly one network. A click that matches own-click
+  // patterns for two networks (a marker shared across networks, or one scoped
+  // to every policy reading the shared afsrc=1) can't say whose credit it
+  // moved, so it only exempts. The catch-all `universal` network doesn't count.
+  const ownNetworks = new Set(
+    scopes.map((scope) => scope.networkId).filter((id) => id !== UNIVERSAL_NETWORK_ID),
+  );
+
+  if (ownNetworks.size !== 1) {
     return false;
   }
 
