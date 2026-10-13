@@ -9,7 +9,12 @@ import {
   validatePolicy,
 } from '../src';
 import { cjPolicy } from '../src/policies';
-import { SessionStorageStateStore, type WebStorageLike } from '../src/stores';
+import {
+  ChromeLocalStateStore,
+  type ChromeStorageAreaLike,
+  SessionStorageStateStore,
+  type WebStorageLike,
+} from '../src/stores';
 
 const behaviors = [
   'suppress-prompts',
@@ -43,6 +48,38 @@ describe('StanddownSession', () => {
     await expect(
       session.shouldStandDown('merchant.example', 31 * 60 * 1_000),
     ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+  });
+
+  it('re-arms the CJ 60-minute floor on each new referral across a browser restart', async () => {
+    const local = new FakeChromeStorageArea();
+    const inSession = (sessionId: string, now: number) =>
+      new StanddownSession(new ChromeLocalStateStore(local, { sessionId, now: () => now }));
+
+    // CJ referrals at 0 and 50 min, in one browser session.
+    await inSession('browser-session-1', 0).ingest(
+      { url: 'https://merchant.example/?cjevent=abc', now: 0 },
+      [cjPolicy],
+    );
+    await inSession('browser-session-1', 3_000_000).ingest(
+      { url: 'https://merchant.example/?cjevent=def', now: 3_000_000 },
+      [cjPolicy],
+    );
+
+    // Browser restarted at 70 min: the floor counts from the 50-min referral.
+    await expect(
+      inSession('browser-session-2', 4_200_000).ingest(
+        { url: 'https://merchant.example/', now: 4_200_000 },
+        [cjPolicy],
+      ),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+
+    // Restarted again at 110 min: 60 min after the latest referral, it lapses.
+    await expect(
+      inSession('browser-session-3', 6_600_000).ingest(
+        { url: 'https://merchant.example/', now: 6_600_000 },
+        [cjPolicy],
+      ),
+    ).resolves.toMatchObject({ standDown: false });
   });
 
   it('does not extend session-or-min records when activity is recorded', async () => {
@@ -656,5 +693,28 @@ class FakeWebStorage implements WebStorageLike {
 
   removeItem(key: string): void {
     this.#items.delete(key);
+  }
+}
+
+class FakeChromeStorageArea implements ChromeStorageAreaLike {
+  readonly data: Record<string, unknown> = {};
+
+  get(
+    keys?: string | string[] | Record<string, unknown> | null,
+    callback?: (items: Record<string, unknown>) => void,
+  ): undefined {
+    const names = typeof keys === 'string' ? [keys] : Array.isArray(keys) ? keys : Object.keys(this.data);
+    const items: Record<string, unknown> = {};
+    for (const name of names) {
+      if (name in this.data) items[name] = structuredClone(this.data[name]);
+    }
+    callback?.(items);
+    return undefined;
+  }
+
+  set(items: Record<string, unknown>, callback?: () => void): undefined {
+    Object.assign(this.data, structuredClone(items));
+    callback?.();
+    return undefined;
   }
 }

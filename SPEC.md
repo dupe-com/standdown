@@ -76,8 +76,10 @@ expire on a timer. `minDurationMs` therefore expresses an intended *floor*, not 
 ceiling: `0` means "session-only, no extra minimum" and any positive value
 documents a minimum the integrator wants honored across session boundaries. That
 floor is only enforced as real elapsed time when a **persistent** store
-(`ChromeLocalStateStore`) carries the record past a session; with a
-session-scoped store the stand-down simply ends with the session. `inactivity-window`
+(`ChromeLocalStateStore`) carries the record past a session, and it counts from
+the **latest referral** (`max(startedAt, lastActivityAt) + minDurationMs`): each
+new matching landing re-arms it, while plain browsing (`recordActivity`) never
+moves it. With a session-scoped store the stand-down simply ends with the session. `inactivity-window`
 is the rule that computes a timed expiry (`max(startedAt + minDurationMs,
 lastActivityAt + inactivityMs)`).
 

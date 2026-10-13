@@ -45,7 +45,8 @@ const baseRoutes = {
   '/later-clean': html(),
 };
 
-// steps: a URL to open, 'RELOAD', or { waitMs }. The last page is judged.
+// steps: a URL to open, 'RELOAD', 'RESTART' (close and reopen the browser with
+// the same profile), or { waitMs }. The last page is judged.
 // expect.relay is required; expect.content is optional.
 const baseScenarios = [
   { name: 'replaceState strips ?cjevent=abc before load', steps: [u('s1.example', '/strip?cjevent=abc')], expect: { relay: true, matchKind: 'landing' } },
@@ -85,16 +86,23 @@ const server = http
   })
   .listen(PORT);
 
-const ctx = await chromium.launchPersistentContext('', {
-  headless: !process.env.HEADED,
-  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
-  args: [
-    `--disable-extensions-except=${ext}`,
-    `--load-extension=${ext}`,
-    '--host-resolver-rules=MAP *.example 127.0.0.1, MAP *.*.example 127.0.0.1',
-  ],
-});
-const worker = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker'));
+// A real profile directory, so a 'RESTART' step can close the browser and open
+// it again: chrome.storage.session is wiped, chrome.storage.local survives.
+const profile = mkdtempSync(join(tmpdir(), 'standdown-relay-e2e-profile-'));
+async function launch() {
+  const context = await chromium.launchPersistentContext(profile, {
+    headless: !process.env.HEADED,
+    ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+    args: [
+      `--disable-extensions-except=${ext}`,
+      `--load-extension=${ext}`,
+      '--host-resolver-rules=MAP *.example 127.0.0.1, MAP *.*.example 127.0.0.1',
+    ],
+  });
+  const sw = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
+  return { context, sw };
+}
+let { context: ctx, sw: worker } = await launch();
 
 async function readProbe(page) {
   await page.waitForFunction(() => document.documentElement.hasAttribute('data-probe'), null, { timeout: 8000 });
@@ -104,10 +112,16 @@ async function readProbe(page) {
 let failures = 0;
 const results = [];
 for (const s of scenarios) {
-  const page = await ctx.newPage();
+  let page = await ctx.newPage();
   let r;
   try {
     for (const step of s.steps) {
+      if (step === 'RESTART') {
+        await ctx.close();
+        ({ context: ctx, sw: worker } = await launch());
+        page = await ctx.newPage();
+        continue;
+      }
       if (step === 'RELOAD') {
         await page.evaluate(() => document.documentElement.removeAttribute('data-probe'));
         await page.reload();
@@ -138,7 +152,8 @@ for (const s of scenarios) {
   await page.close();
 }
 
-// Closing a tab must delete its landing record (tabs.onRemoved).
+// Closing a tab must delete its landing record (tabs.onRemoved). Checks the
+// current browser run only: a RESTART already wipes chrome.storage.session.
 const leftover = Object.keys(await worker.evaluate(() => chrome.storage.session.get(null))).filter((k) =>
   k.startsWith('standdown:relay:tab:'),
 );
@@ -151,4 +166,5 @@ console.log(failures ? `\n${failures} FAILED` : `\nALL ${scenarios.length + 1} P
 await ctx.close();
 server.close();
 rmSync(ext, { recursive: true, force: true });
+rmSync(profile, { recursive: true, force: true });
 process.exit(failures ? 1 : 0);

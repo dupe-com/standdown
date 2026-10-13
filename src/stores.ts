@@ -294,9 +294,12 @@ export function dropSessionBoundRecords(
   const next = cloneState(state);
 
   for (const [host, record] of Object.entries(next.sessions)) {
+    // The floor counts from the latest referral: for session-or-min records
+    // lastActivityAt only moves when a new referral matches (recordActivity
+    // leaves it alone), so browsing alone never extends it.
     if (
       record.sessionRule === 'session-or-min' &&
-      now >= record.startedAt + record.minDurationMs
+      now >= Math.max(record.startedAt, record.lastActivityAt) + record.minDurationMs
     ) {
       delete next.sessions[host];
     }

@@ -57,5 +57,12 @@ node examples/relay-extension/e2e/run.mjs
 ```
 
 Set `CHROMIUM_PATH` to reuse a Chromium you already have, `HEADED=1` to watch it,
-or `EXTRA_CASES=path/to/cases.mjs` to add your own pages and scenarios. See
+or `EXTRA_CASES=path/to/cases.mjs` to add your own pages and scenarios. A step
+can be `'RESTART'`, which closes and reopens the browser with the same profile.
+`e2e/cases/session-floor.mjs` uses it to check CJ's "session, or at least 60
+minutes" rule (shortened to 8 s) across real restarts:
+
+```sh
+EXTRA_CASES=examples/relay-extension/e2e/cases/session-floor.mjs node examples/relay-extension/e2e/run.mjs
+``` See
 [`VERIFICATION.md`](./VERIFICATION.md) for the last recorded run.

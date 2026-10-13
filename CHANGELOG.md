@@ -22,6 +22,14 @@ New opt-in entry point. Nothing changes for hosts that don't use it.
 - `Decision.matchKind?: 'landing'`, set only by the relay when the stand-down came
   from a captured param that is no longer in the URL.
 
+### Fixed
+
+- A `session-or-min` stand-down's minimum (CJ: 60 minutes) now counts from the
+  **latest** referral rather than the first, when a persistent store carries it
+  across a browser restart. A shopper referred at 2:00 and again at 2:50 who
+  restarts the browser at 3:10 stays stood down until 3:50; before, the
+  stand-down was dropped at 3:00. Plain browsing still never extends it.
+
 ## 0.3.3 - 2026-07-14
 
 Hardening for `selfExemptionScope: 'session'`, closing the last item of the
