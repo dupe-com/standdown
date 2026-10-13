@@ -239,6 +239,40 @@ describe('relay: capture at document_start, decide in background', () => {
     ).resolves.toMatchObject({ standDown: true, reason: 'active-standdown:cj' });
   });
 
+  it("an own click in the referrer doesn't hide a competitor's param in this page's URL", async () => {
+    const selfPatterns: SelfExemption[] = [
+      { name: 'cjevent', value: 'own-click', match: 'equals', networkId: 'cj' },
+    ];
+    const h = harness({ selfPatterns });
+    // Browsing on from our own-click page to a page carrying a competitor's param,
+    // which the page then strips.
+    const page = h.open(
+      'https://shop.example/deal?cjevent=someone-else',
+      1_000,
+      'https://shop.example/?cjevent=own-click',
+    );
+    page.window.location.href = 'https://shop.example/deal';
+    await h.flush();
+
+    expect(page.record?.matches).toEqual([{ policyId: 'cj', params: ['cjevent'] }]);
+    await expect(h.query('https://shop.example/deal', 1_500)).resolves.toMatchObject({
+      standDown: true,
+      matchKind: 'landing',
+    });
+  });
+
+  it('an own click in the referrer still exempts the referrer itself', async () => {
+    const selfPatterns: SelfExemption[] = [
+      { name: 'cjevent', value: 'own-click', match: 'equals', networkId: 'cj' },
+    ];
+    const h = harness({ selfPatterns });
+    const page = h.open('https://shop.example/cart', 1_000, 'https://shop.example/?cjevent=own-click');
+    await h.flush();
+
+    expect(page.record?.matches).toEqual([]);
+    await expect(h.query('https://shop.example/cart', 1_500)).resolves.toMatchObject({ standDown: false });
+  });
+
   it('expires the landing record after the window', async () => {
     const h = harness({ maxAgeMs: 5_000 });
     h.open('https://shop.example/?cjevent=abc', 1_000);

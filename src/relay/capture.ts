@@ -131,13 +131,20 @@ function matchLanding(
       sources.push(referrerUrl.searchParams);
     }
 
-    if (sources.some((params) => isSelfExempt(opts.selfPatterns, policy, params))) {
+    // An own click in THIS page's URL exempts the network for this landing, as
+    // detection does. One in the referrer only exempts the referrer's own
+    // params: it must never hide a competitor's param in this page's URL.
+    if (hostEligible && isSelfExempt(opts.selfPatterns, policy, url.searchParams)) {
       continue;
     }
 
     const names = new Set<string>();
 
     for (const params of sources) {
+      if (isSelfExempt(opts.selfPatterns, policy, params)) {
+        continue;
+      }
+
       // Names match in any casing (CJEVENT, CjEvent); values stay exact.
       const landing = caseInsensitiveParams(params);
       for (const rule of policy.detection.landingParams ?? []) {
