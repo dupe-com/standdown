@@ -46,6 +46,23 @@ that can't hold (or add) `webNavigation`/`webRequest` must use `content`.
 | A background worker or native side panel deciding from a **tab's URL** (no live page, no `document`, no first-party cookies) | `standdown/url` |
 | MV3 **without** `webNavigation`, on shops that strip referral params before `document_idle` | `standdown/relay` (capture + background) |
 
+**What each adapter can see**, from most to least permission:
+
+| | `webext` | `relay` | `content` |
+| --- | --- | --- | --- |
+| Extra permissions | `webNavigation` (+ optional `webRequest`) | none beyond host access + `storage` | none |
+| Install warning | "Read your browsing history" | none new | none |
+| Runs in | background | `document_start` capture + background | content script at `document_idle` |
+| Param the shop strips before idle | ✅ | ✅ | ❌ |
+| Same-site / `link.` → `www.` script forward | ✅ | ✅ (within `hopWindowMs`) | ❌ |
+| Server-side redirect chain (e.g. through a network's click domain) | ✅ with `webRequest` | ❌ | ❌ |
+| First-party cookie names | ❌ | ❌ | ✅ |
+
+In short: `relay` is the low-permission middle option. It catches what `content`
+misses on shops that strip the param, without the install warning `webext`
+needs. A host can run `relay` and `content` side by side if it also wants cookie
+rules (Rakuten's `lsclick_mid`).
+
 `createStanddown()` (the `webext` adapter) **requires** `chrome.webNavigation.onCommitted`
 and throws if it's absent — an adapter that observes no navigations would fail
 open. If you can't ship that permission, use `content`. Adding
@@ -383,6 +400,67 @@ It only lifts when it is safe:
   `disableHosts` host.
 
 Decisions it lifts carry `reason: 'self-click-lifted'` in the audit log.
+
+#### What the shopper sees
+
+Nothing changes for the shopper; this is host configuration. A typical visit:
+
+1. 2:00 — the shopper clicks a competitor's CJ link to `shop.example`. Your
+   extension stands down (CJ: for the session, at least 60 minutes).
+2. 2:10 — still shopping, the shopper clicks **your** CJ link to the same shop.
+   CJ now credits your click, so with `selfClickLift` on the stand-down ends and
+   your extension may activate again (still behind your usual user-click rules).
+3. 2:20 — they click a competitor's CJ link again. That is now the latest click,
+   so your extension stands down again.
+
+Had step 2 been your **Impact** link instead, nothing would lift: your Impact
+click doesn't move the CJ partner's credit.
+
+#### Setting up your own-click patterns, per network
+
+A pattern must match a param **value only your clicks carry**. A network's click
+ID alone can't tell your click from a competitor's (`cjevent`, `irclickid` and
+`awc` are per-click IDs, not publisher IDs), so don't scope a lift to those
+without a value that is yours.
+
+The most portable approach is a marker of your own: add a param to the
+**destination URL** of every affiliate link you build (the deep link's landing
+page), for example `?my_click_id=_mybrand`. A deep link redirects to that URL,
+so the marker usually arrives on the landing page with the click, whatever the
+network (confirm with a real click, below). Then scope one pattern per network
+you're on:
+
+```ts
+const selfPatterns = [
+  // Your own marker, on each network you send traffic through:
+  { name: 'my_click_id', value: '_mybrand', match: 'contains', networkId: 'cj' },
+  { name: 'my_click_id', value: '_mybrand', match: 'contains', networkId: 'impact' },
+  { name: 'my_click_id', value: '_mybrand', match: 'contains', networkId: 'awin' },
+  // Where the network's own landing param already identifies you, you can use
+  // it instead (check a real landing URL from your own link first):
+  // Rakuten: ranSiteID starts with your encrypted publisher ID.
+  { name: 'ranSiteID', value: 'YOUR_ENCRYPTED_ID-', match: 'contains', networkId: 'rakuten' },
+  // eBay Partner Network: campid is your campaign ID.
+  { name: 'campid', value: 'YOUR_CAMPAIGN_ID', match: 'equals', networkId: 'ebay-epn' },
+] as const;
+
+createContentStanddown({ policies, selfPatterns, selfClickLift: 'same-network' });
+```
+
+To find yours: click one of your own affiliate links for each network, copy the
+URL the shop's page lands on (before it strips anything, e.g. from the network's
+link tester or your browser's network log), and pick the param/value that would
+differ on a competitor's click. Then:
+
+- **Scope every pattern** with `networkId` (or `policyId`). An unscoped pattern
+  never exempts or lifts anything (see below).
+- **Prefer `equals` or a distinctive `contains` value.** A loose `contains` (e.g.
+  a short common string) could match a competitor's click and lift *their*
+  stand-down, which is a hijack. Own-click names match case-sensitively.
+- **Relay hosts:** pass the same `selfPatterns` and `selfClickLift` to both
+  `captureLanding()` and `createRelayStanddown()`.
+- Networks whose policy never activates (`amazon`) or with no click of yours
+  (`universal`, `afsrc=1`) need no pattern.
 
 ### A self-click param that clears every network
 

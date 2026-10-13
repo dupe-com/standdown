@@ -62,6 +62,11 @@ The choice is driven by **permissions, not manifest version.**
 | MV3 **without** `webNavigation`, on shops that strip referral params before `document_idle` | `standdown/relay/capture` + `standdown/relay/background` | `captureLanding()` at `document_start` + `createRelayStanddown()` (see `INSTALL.md` → Relay adapter) |
 | Non-extension or custom host | `standdown` | `StanddownSession` + `guardActivation` |
 
+**Relay vs content:** both need no new permissions. If the extension has a
+background service worker, prefer `relay`: it also catches referral params the
+shop strips before `document_idle`, which `content` misses. Use `content` alone
+for Safari / content-script-only contexts.
+
 **Decision rule:** if the extension does not already hold
 `webRequest`/`webNavigation`, use `content`. Do **not** add those permissions to
 an already-published extension just to reach for `webext` — doing so triggers a
@@ -233,6 +238,11 @@ post — when the run passes.
   use `kind: 'regex'`. `validatePolicy` warns on bare-label suffixes.
 - **`allPolicies` is the verified set.** `experimentalPolicies` (skimlinks,
   partnerize) have inferred redirect domains — opt in only after verifying.
+- **Own-click lift is opt-in.** `selfClickLift: 'same-network'` lets your own
+  click end an earlier competitor's stand-down on the same network. It only works
+  with `selfPatterns` scoped per network to a value only your clicks carry, never
+  a bare network click ID (`cjevent`, `irclickid`, `awc`). See `INSTALL.md` →
+  Self-exemption scope.
 - **`amazon` is detect-only** (`activation.mode: never`) — the guard never allows
   activation on Amazon hosts unless you override the policy.
 

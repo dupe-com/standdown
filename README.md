@@ -101,7 +101,9 @@ or `skills/showcase` to grab the others.) The skill pulls the live
 
 **Wiring it by hand instead?** The full manual walkthrough and complete API
 reference — the published surfaces, self-exemption, per-host disable, signed
-refresh, the `standdown/url` helper, the `standdown/relay` early-landing capture, interop — live in **[INSTALL.md](./INSTALL.md)**.
+refresh, the `standdown/url` helper, the `standdown/relay` early-landing capture
+(the low-permission way to catch params a shop strips), the opt-in own-click
+lift, interop — live in **[INSTALL.md](./INSTALL.md)**.
 
 ## What makes it different
 
