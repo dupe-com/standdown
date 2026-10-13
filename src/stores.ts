@@ -499,8 +499,7 @@ function parseAuditEntry(value: unknown): AuditEntry {
     (action !== 'ingest' &&
       action !== 'shouldStandDown' &&
       action !== 'recordActivity' &&
-      action !== 'refresh' &&
-      action !== 'selfClickLift') ||
+      action !== 'refresh') ||
     (advertiserHost !== undefined && typeof advertiserHost !== 'string')
   ) {
     throw new Error('invalid audit entry');

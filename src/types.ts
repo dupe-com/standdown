@@ -215,7 +215,7 @@ export interface ActivationBenefit {
 
 export interface AuditEntry {
   time: number;
-  action: 'ingest' | 'shouldStandDown' | 'recordActivity' | 'refresh' | 'selfClickLift';
+  action: 'ingest' | 'shouldStandDown' | 'recordActivity' | 'refresh';
   advertiserHost?: string;
   detection?: Detection;
   decision?: Decision;

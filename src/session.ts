@@ -394,7 +394,10 @@ export class StanddownSession {
           } satisfies Decision,
         };
       },
-      'selfClickLift',
+      // Audited as an ingest (a state change, reason says what happened): a new
+      // action name would make older releases reject the whole saved state on a
+      // rollback, and widen AuditEntry['action'] for hosts that switch on it.
+      'ingest',
       key ?? normalizeHost(host),
     );
 

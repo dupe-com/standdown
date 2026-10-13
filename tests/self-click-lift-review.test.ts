@@ -79,6 +79,27 @@ describe('selfClickLift review findings', () => {
   });
 });
 
+describe('saved state stays readable by older releases (rollback)', () => {
+  it('only writes audit actions that v0.3.3 can parse, even with the lift on', async () => {
+    const readableBy033 = ['ingest', 'shouldStandDown', 'recordActivity', 'refresh'];
+    const session = lifting();
+    await session.ingest({ url: 'https://shop.example/?cjevent=abc', now: 0 }, [cjPolicy]);
+    await session.ingest(
+      { url: 'https://shop.example/?cjevent=own', now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 },
+      [cjPolicy],
+    );
+    await session.liftForSelfClick(
+      { url: 'https://shop.example/', policyIds: ['cj'], clickAt: 1_500, now: 2_000 },
+      [cjPolicy],
+    );
+    await session.recordActivity(3_000);
+
+    const actions = (await session.exportAuditLog()).map((entry) => entry.action);
+    expect(actions.length).toBeGreaterThan(0);
+    expect(actions.every((action) => readableBy033.includes(action))).toBe(true);
+  });
+});
+
 describe('relay review findings', () => {
   const capture = (self?: string[]) => ({
     type: 'standdown:relay:capture',
@@ -133,7 +154,9 @@ describe('relay review findings', () => {
     );
     for (const at of [1_100, 1_200, 1_300]) await relay.shouldStandDown(7, 'https://shop.example/', at);
 
-    const lifts = (await relay.session.exportAuditLog()).filter((entry) => entry.action === 'selfClickLift');
+    const lifts = (await relay.session.exportAuditLog()).filter((entry) =>
+      entry.decision?.reason?.startsWith('self-click-'),
+    );
     expect(lifts).toHaveLength(1);
     expect(await relay.landingFor(7, 1_300)).not.toHaveProperty('self');
   });
