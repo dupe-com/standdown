@@ -40,3 +40,34 @@ checks passed.
   reproduce the stripping patterns.
 - **A real CJ click.** The `cjevent` value is a placeholder; the run checks
   detection, not network-side attribution.
+
+## Later additions (same date, same setup)
+
+**In short:** two more behaviours were checked in the same real browser. CJ's
+"session, or at least 60 minutes" rule now survives a browser restart counted
+from the latest referral, and the opt-in `selfClickLift` lets the host's own
+CJ click end a competitor's earlier CJ stand-down without ever touching another
+network's. Each case was also run with the change undone, and the cases that
+depend on it failed, so they test what they claim.
+
+### Minimum after a browser restart (`e2e/cases/session-floor.mjs`, floor shortened to 8 s)
+
+| Scenario | Result | With the fix undone |
+| --- | --- | --- |
+| Referral, restart right away | stands down ✅ | stands down |
+| Referral, restart after the floor | clear ✅ | clear |
+| Second referral re-arms the floor, restart | stands down ✅ | **clear (fails)** |
+
+### Own-click lift (`e2e/cases/self-click-lift.mjs`, `selfClickLift: 'same-network'`)
+
+| Scenario | Result | With the option off |
+| --- | --- | --- |
+| Competitor's CJ click, then our CJ click (both stripped) | clear, `self-click-lifted` ✅ | **stands down (fails)** |
+| …and the next page of the visit | clear ✅ | **stands down (fails)** |
+| Our CJ click, then a competitor's CJ click | stands down ✅ | stands down |
+| Competitor's Impact click, then our CJ click | stands down ✅ | stands down |
+| Our own click alone | clear ✅ | clear |
+
+The base relay scenarios pass unchanged under both configs (12/12 and 14/14 in
+total including base cases and the tab-cleanup check).
+
