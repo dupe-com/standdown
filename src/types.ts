@@ -208,7 +208,7 @@ export interface ActivationBenefit {
 
 export interface AuditEntry {
   time: number;
-  action: 'ingest' | 'shouldStandDown' | 'recordActivity' | 'refresh';
+  action: 'ingest' | 'shouldStandDown' | 'recordActivity' | 'refresh' | 'selfClickLift';
   advertiserHost?: string;
   detection?: Detection;
   decision?: Decision;
@@ -224,6 +224,12 @@ export interface SessionRecord {
   minDurationMs: number;
   inactivityMs?: number;
   behaviors: Behavior[];
+  /**
+   * Every policy whose detection fed this record. `selfClickLift` lifts a
+   * record only when all of them are covered by the own click; a record
+   * without this field (written before it existed) is never lifted.
+   */
+  policyIds?: string[];
 }
 
 /**

@@ -430,6 +430,7 @@ function parseSessionRecord(value: unknown): SessionRecord {
     minDurationMs,
     inactivityMs,
     behaviors,
+    policyIds,
   } = value;
 
   if (
@@ -442,7 +443,9 @@ function parseSessionRecord(value: unknown): SessionRecord {
     typeof minDurationMs !== 'number' ||
     (inactivityMs !== undefined && typeof inactivityMs !== 'number') ||
     !Array.isArray(behaviors) ||
-    !behaviors.every(isBehavior)
+    !behaviors.every(isBehavior) ||
+    (policyIds !== undefined &&
+      (!Array.isArray(policyIds) || !policyIds.every((id) => typeof id === 'string')))
   ) {
     throw new Error('invalid session record');
   }
@@ -465,6 +468,10 @@ function parseSessionRecord(value: unknown): SessionRecord {
     record.inactivityMs = inactivityMs;
   }
 
+  if (policyIds !== undefined) {
+    record.policyIds = [...policyIds];
+  }
+
   return record;
 }
 
@@ -480,7 +487,8 @@ function parseAuditEntry(value: unknown): AuditEntry {
     (action !== 'ingest' &&
       action !== 'shouldStandDown' &&
       action !== 'recordActivity' &&
-      action !== 'refresh') ||
+      action !== 'refresh' &&
+      action !== 'selfClickLift') ||
     (advertiserHost !== undefined && typeof advertiserHost !== 'string')
   ) {
     throw new Error('invalid audit entry');
@@ -547,6 +555,10 @@ function cloneSessionRecord(record: SessionRecord): SessionRecord {
 
   if (record.inactivityMs !== undefined) {
     next.inactivityMs = record.inactivityMs;
+  }
+
+  if (record.policyIds !== undefined) {
+    next.policyIds = [...record.policyIds];
   }
 
   return next;

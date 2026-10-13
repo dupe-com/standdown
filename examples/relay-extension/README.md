@@ -64,5 +64,13 @@ minutes" rule (shortened to 8 s) across real restarts:
 
 ```sh
 EXTRA_CASES=examples/relay-extension/e2e/cases/session-floor.mjs node examples/relay-extension/e2e/run.mjs
+```
+
+`e2e/cases/self-click-lift.mjs` checks `selfClickLift`: your own CJ click ends a
+competitor's earlier CJ stand-down, and nothing else (a later competitor click,
+or another network, still stands down):
+
+```sh
+EXTRA_CASES=examples/relay-extension/e2e/cases/self-click-lift.mjs node examples/relay-extension/e2e/run.mjs
 ``` See
 [`VERIFICATION.md`](./VERIFICATION.md) for the last recorded run.

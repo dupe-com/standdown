@@ -76,6 +76,11 @@ export interface CreateStanddownOptions {
    * on the same bucket the navigation wrote.
    */
   readonly sessionKey?: (url: string) => string | undefined;
+  /**
+   * Let the host's own click lift an active stand-down on the same network.
+   * Off by default. See `StanddownSession`'s `selfClickLift` for the rules.
+   */
+  readonly selfClickLift?: 'off' | 'same-network';
 }
 
 export interface StanddownWebextController {
@@ -493,6 +498,7 @@ function sessionOptions(
       selfExemptionScope?: 'policy' | 'session';
       sessionExemptionTtlMs?: number;
       sessionKey?: (url: string) => string | undefined;
+      selfClickLift?: 'off' | 'same-network';
     }
   | undefined {
   const sessionOpts: {
@@ -500,6 +506,7 @@ function sessionOptions(
     selfExemptionScope?: 'policy' | 'session';
     sessionExemptionTtlMs?: number;
     sessionKey?: (url: string) => string | undefined;
+    selfClickLift?: 'off' | 'same-network';
   } = {};
 
   if (opts.auditLog !== undefined) {
@@ -516,6 +523,10 @@ function sessionOptions(
 
   if (opts.sessionKey !== undefined) {
     sessionOpts.sessionKey = opts.sessionKey;
+  }
+
+  if (opts.selfClickLift !== undefined) {
+    sessionOpts.selfClickLift = opts.selfClickLift;
   }
 
   return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;

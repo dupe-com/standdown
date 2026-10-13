@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cjPolicy } from '../src/policies';
+import { cjPolicy, impactPolicy } from '../src/policies';
 import {
   createRelayStanddown,
   type RelayChromeLike,
@@ -426,6 +426,112 @@ describe('relay: capture at document_start, decide in background', () => {
   });
 });
 
+describe('relay: selfClickLift', () => {
+  const selfPatterns: SelfExemption[] = [
+    { name: 'cjevent', value: 'own-click', match: 'equals', networkId: 'cj' },
+  ];
+  const policies = [cjPolicy, impactPolicy];
+  const lifting = () => harness({ policies, selfPatterns, selfClickLift: 'same-network' });
+
+  it("lifts a competitor's earlier CJ stand-down after our own CJ click, even when the page strips it", async () => {
+    const h = lifting();
+    h.open('https://shop.example/?cjevent=someone-else', 1_000);
+    await h.flush();
+    await expect(h.query('https://shop.example/', 1_100)).resolves.toMatchObject({ standDown: true });
+
+    const own = h.open('https://shop.example/?cjevent=own-click', 2_000);
+    own.window.location.href = 'https://shop.example/';
+    await h.flush();
+
+    await expect(h.query('https://shop.example/', 2_500)).resolves.toMatchObject({
+      standDown: false,
+      reason: 'self-click-lifted',
+    });
+    // And on later pages of the visit.
+    h.open('https://shop.example/cart', 3_000);
+    await h.flush();
+    await expect(h.query('https://shop.example/cart', 3_100)).resolves.toMatchObject({ standDown: false });
+  });
+
+  it('drops an unqueried earlier CJ landing in the tab once our own CJ click lands', async () => {
+    const h = lifting();
+    h.open('https://shop.example/?cjevent=someone-else', 1_000);
+    h.open('https://shop.example/?cjevent=own-click', 2_000);
+    await h.flush();
+
+    await expect(h.query('https://shop.example/', 2_500)).resolves.toMatchObject({ standDown: false });
+  });
+
+  it('a competitor click after our own click stands down', async () => {
+    const h = lifting();
+    h.open('https://shop.example/?cjevent=own-click', 1_000);
+    h.open('https://shop.example/?cjevent=someone-else', 2_000);
+    await h.flush();
+
+    await expect(h.query('https://shop.example/', 2_500)).resolves.toMatchObject({ standDown: true });
+  });
+
+  it("a competitor's referral in another tab after our click keeps the stand-down", async () => {
+    const h = lifting();
+    h.open('https://shop.example/?cjevent=own-click', 1_000);
+    await h.flush();
+
+    await h.relay.ingestCapture(
+      TAB + 1,
+      { v: 1, host: 'shop.example', at: 2_000, matches: [{ policyId: 'cj', params: ['cjevent'] }] },
+      2_000,
+    );
+    await expect(h.relay.shouldStandDown(TAB + 1, 'https://shop.example/', 2_000)).resolves.toMatchObject({
+      standDown: true,
+    });
+
+    await expect(h.query('https://shop.example/', 2_500)).resolves.toMatchObject({ standDown: true });
+  });
+
+  it('never lifts another network: our CJ click leaves an Impact stand-down alone', async () => {
+    const h = lifting();
+    h.open('https://shop.example/?irclickid=someone-else', 1_000);
+    await h.flush();
+    await h.query('https://shop.example/', 1_100);
+
+    h.open('https://shop.example/?cjevent=own-click', 2_000);
+    await h.flush();
+
+    await expect(h.query('https://shop.example/', 2_500)).resolves.toMatchObject({
+      standDown: true,
+      policyId: 'impact',
+    });
+  });
+
+  it('is off by default: our own click only exempts, the earlier stand-down holds', async () => {
+    const h = harness({ policies, selfPatterns });
+    h.open('https://shop.example/?cjevent=someone-else', 1_000);
+    await h.flush();
+    await h.query('https://shop.example/', 1_100);
+
+    const own = h.open('https://shop.example/?cjevent=own-click', 2_000);
+    await h.flush();
+
+    expect(own.record).not.toHaveProperty('self');
+    await expect(h.query('https://shop.example/', 2_500)).resolves.toMatchObject({ standDown: true });
+  });
+
+  it('reports the own click by policy id only, never the value', async () => {
+    const h = lifting();
+    h.open('https://shop.example/?cjevent=own-click&email=person@example.com', 1_000);
+    await h.flush();
+
+    expect(h.sent.at(-1)?.record).toEqual({
+      v: 1,
+      host: 'shop.example',
+      at: 1_000,
+      matches: [],
+      self: ['cj'],
+    });
+    expect(JSON.stringify(h.sent)).not.toContain('own-click');
+  });
+});
+
 describe('policy.detection.trackingHosts', () => {
   it('validates as a DomainRule list', () => {
     expect(() =>
@@ -448,6 +554,7 @@ function harness(
     policies?: readonly StanddownPolicy[];
     selfPatterns?: readonly SelfExemption[];
     maxAgeMs?: number;
+    selfClickLift?: 'off' | 'same-network';
   } = {},
 ) {
   const policies = opts.policies ?? [cjPolicy];
@@ -460,6 +567,7 @@ function harness(
     now: () => 0,
     ...(opts.selfPatterns ? { selfPatterns: opts.selfPatterns } : {}),
     ...(opts.maxAgeMs ? { maxAgeMs: opts.maxAgeMs } : {}),
+    ...(opts.selfClickLift ? { selfClickLift: opts.selfClickLift } : {}),
   });
 
   return {
@@ -476,6 +584,7 @@ function harness(
         now: () => at,
         ...(opts.selfPatterns ? { selfPatterns: opts.selfPatterns } : {}),
         ...(opts.maxAgeMs ? { maxAgeMs: opts.maxAgeMs } : {}),
+        ...(opts.selfClickLift ? { selfClickLift: opts.selfClickLift } : {}),
         sendMessage: (message) => {
           sent.push(structuredClone(message));
           const host = new URL(url).hostname;

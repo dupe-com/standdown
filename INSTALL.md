@@ -359,6 +359,31 @@ It is deliberately **network-precise, not host-blanket**, and monotone:
 - A `disableHosts` match is immune — a hard-disabled host stands down regardless
   of any exemption.
 
+### Letting your own click end an earlier stand-down (`selfClickLift`)
+
+**In short:** off by default. Turn it on and, when a shopper clicks *your* link
+on a network after a competitor's link on that same network, the stand-down for
+the competitor ends, because the network now credits your click.
+
+```ts
+createContentStanddown({ policies, selfPatterns, selfClickLift: 'same-network' });
+// relay: set it on BOTH halves, like selfPatterns
+captureLanding({ policies, selfPatterns, selfClickLift: 'same-network' });
+createRelayStanddown({ policies, selfPatterns, selfClickLift: 'same-network' });
+```
+
+It only lifts when it is safe:
+
+- **Same network only.** Your CJ click ends a CJ stand-down, never an Impact or
+  Rakuten one. Scope one `selfPatterns` entry per network you're on.
+- **Only an older referral.** A competitor click *after* yours (in any tab) keeps
+  the stand-down.
+- **Never a mixed one.** If several networks fed the stand-down, it stays.
+- **Never with a competing signal** on the same page, and never on a
+  `disableHosts` host.
+
+Decisions it lifts carry `reason: 'self-click-lifted'` in the audit log.
+
 ### A self-click param that clears every network
 
 A `selfPattern` only clears a stand-down for the network (or policy) it is

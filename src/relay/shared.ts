@@ -27,6 +27,12 @@ export interface LandingRecord {
   readonly host: string;
   readonly at: number;
   readonly matches: readonly LandingMatch[];
+  /**
+   * Policies whose host-own click (`selfPatterns`) matched on this landing, by
+   * policy id only. Lets the background apply `selfClickLift` after the page
+   * strips the param. Absent when there was none.
+   */
+  readonly self?: readonly string[];
 }
 
 export interface LandingMatch {
@@ -79,7 +85,17 @@ export function hostOf(value: string): string | undefined {
  * exactly the documented shape, including extra keys that could smuggle data.
  */
 export function isLandingRecord(value: unknown): value is LandingRecord {
-  if (!isPlainObject(value) || !hasOnlyKeys(value, ['v', 'host', 'at', 'matches'])) {
+  if (!isPlainObject(value) || !hasOnlyKeys(value, ['v', 'host', 'at', 'matches', 'self'])) {
+    return false;
+  }
+
+  if (
+    value.self !== undefined &&
+    (!Array.isArray(value.self) ||
+      value.self.length === 0 ||
+      value.self.length > MAX_MATCHES ||
+      !value.self.every(isShortString))
+  ) {
     return false;
   }
 

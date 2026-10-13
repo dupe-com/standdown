@@ -82,6 +82,11 @@ export interface CreateRelayStanddownOptions {
    * one session across a merchant's hosts. See `StanddownSession`'s `sessionKey`.
    */
   readonly sessionKey?: (url: string) => string | undefined;
+  /**
+   * Let the host's own click lift an active stand-down on the same network.
+   * Off by default. See `StanddownSession`'s `selfClickLift` for the rules.
+   */
+  readonly selfClickLift?: 'off' | 'same-network';
 }
 
 export interface RelayStanddownController {
@@ -109,6 +114,9 @@ export interface TabLanding {
   /** Last capture seen on `host` in this tab; a hop must follow within `hopWindowMs`. */
   readonly lastAt: number;
   readonly matches: readonly LandingMatch[];
+  /** `selfClickLift` only: policies the tab's latest own click covered, and when. */
+  readonly self?: readonly string[];
+  readonly selfAt?: number;
 }
 
 export interface RelayShouldStandDownMessage {
@@ -179,6 +187,11 @@ export function createRelayStanddown(
   const store = opts.store ?? defaultStore(chromeApi, now);
   const session = new StanddownSession(store, sessionOptions(opts));
   const policyById = new Map(opts.policies.map((policy) => [policy.id, policy]));
+  const liftOn = opts.selfClickLift === 'same-network';
+  const sameNetwork = (a: string, b: string) =>
+    a === b ||
+    (policyById.get(a)?.network.id !== undefined &&
+      policyById.get(a)?.network.id === policyById.get(b)?.network.id);
   let lock: Promise<unknown> = Promise.resolve();
 
   function serialize<T>(task: () => Promise<T>): Promise<T> {
@@ -223,7 +236,7 @@ export function createRelayStanddown(
     await chromeSet(relayStorage, { [tabKey(tabId)]: landing }, runtime);
   }
 
-  function isTracking(match: LandingMatch, host: string): boolean {
+  function isTracking(match: { policyId: string }, host: string): boolean {
     const rules = [
       ...(policyById.get(match.policyId)?.detection.trackingHosts ?? []),
       ...(opts.trackingHosts ?? []),
@@ -245,6 +258,51 @@ export function createRelayStanddown(
     return landing.matches.filter((match) => sameBase || isTracking(match, landing.host));
   }
 
+  /** The own-click policies from `landing` that carry over to `host` (same rules). */
+  function carriedSelf(landing: TabLanding, host: string, at: number): string[] {
+    const self = landing.self ?? [];
+
+    if (landing.host === host) {
+      return [...self];
+    }
+
+    if (at - landing.lastAt > hopWindowMs) {
+      return [];
+    }
+
+    const sameBase = toBase(landing.host) === toBase(host);
+    return self.filter((policyId) => sameBase || isTracking({ policyId }, landing.host));
+  }
+
+  /**
+   * An older landing followed by a newer capture: per network, the newer one
+   * wins. A newer own click drops that network's older referral params, and a
+   * newer referral drops that network's older own click. With `selfClickLift`
+   * off there is no own-click data, so this is a plain merge.
+   */
+  function combine(
+    older: { matches: readonly LandingMatch[]; self?: readonly string[]; selfAt?: number },
+    newerMatches: readonly LandingMatch[],
+    newerSelf: readonly string[],
+    newerAt: number,
+  ): Pick<TabLanding, 'matches' | 'self' | 'selfAt'> {
+    const matches = mergeMatches(
+      older.matches.filter((match) => !newerSelf.some((id) => sameNetwork(id, match.policyId))),
+      newerMatches,
+    );
+    const self = [
+      ...new Set([
+        ...(older.self ?? []).filter(
+          (id) => !newerMatches.some((match) => sameNetwork(match.policyId, id)),
+        ),
+        ...newerSelf,
+      ]),
+    ];
+    const selfAt = newerSelf.length > 0 ? newerAt : older.selfAt;
+
+    return self.length > 0 && selfAt !== undefined ? { matches, self, selfAt } : { matches };
+  }
+
   async function ingestCapture(
     tabId: number,
     record: LandingRecord,
@@ -255,13 +313,16 @@ export function createRelayStanddown(
     }
 
     const known = record.matches.filter((match) => policyById.has(match.policyId));
+    const knownSelf = liftOn ? (record.self ?? []).filter((id) => policyById.has(id)) : [];
 
     await serialize(async () => {
       const existing = await load(tabId, at);
       // Never trust a capture's clock beyond the background's own.
       const landedAt = Math.min(record.at, at);
       const fresh: TabLanding | undefined =
-        known.length > 0 ? { host: record.host, at: landedAt, lastAt: at, matches: known } : undefined;
+        known.length > 0 || knownSelf.length > 0
+          ? { host: record.host, at: landedAt, lastAt: at, ...combine({ matches: [] }, known, knownSelf, landedAt) }
+          : undefined;
 
       if (existing === undefined) {
         await save(tabId, fresh);
@@ -273,19 +334,24 @@ export function createRelayStanddown(
           host: existing.host,
           at: fresh ? Math.max(existing.at, fresh.at) : existing.at,
           lastAt: at,
-          matches: mergeMatches(existing.matches, known),
+          ...combine(existing, known, knownSelf, landedAt),
         });
         return;
       }
 
       const carry = carried(existing, record.host, at);
+      const carrySelf = carriedSelf(existing, record.host, at);
 
-      if (carry.length > 0) {
+      if (carry.length > 0 || carrySelf.length > 0) {
+        const older =
+          carrySelf.length > 0 && existing.selfAt !== undefined
+            ? { matches: carry, self: carrySelf, selfAt: existing.selfAt }
+            : { matches: carry };
         await save(tabId, {
           host: record.host,
           at: fresh ? Math.max(existing.at, fresh.at) : existing.at,
           lastAt: at,
-          matches: mergeMatches(carry, known),
+          ...combine(older, known, knownSelf, landedAt),
         });
         return;
       }
@@ -315,12 +381,34 @@ export function createRelayStanddown(
     }
 
     let relayed: LandingMatch[];
+    let relayedSelf: string[] = [];
+    let selfAt: number | undefined;
 
     try {
       const landing = await serialize(() => load(tabId, at));
       relayed = landing ? carried(landing, host, at) : [];
+
+      if (liftOn && landing) {
+        relayedSelf = carriedSelf(landing, host, at);
+        selfAt = landing.selfAt;
+      }
     } catch {
       return failClosedDecision('relay-store-error');
+    }
+
+    let lifted = false;
+
+    if (relayedSelf.length > 0 && selfAt !== undefined) {
+      try {
+        // The own click may have been stripped from `url`; lift for it here.
+        // Only referrals older than the own click are lifted.
+        lifted = await session.liftForSelfClick(
+          { url, policyIds: relayedSelf, clickAt: selfAt, now: at },
+          opts.policies,
+        );
+      } catch {
+        // Not lifting errs toward standing down.
+      }
     }
 
     const signals: Signals = {
@@ -339,6 +427,10 @@ export function createRelayStanddown(
 
     const replayed: Signals = { ...signals, url: replayUrl(url, relayed, policyById) };
     const decision = await session.ingest(replayed, opts.policies);
+
+    if (lifted && !decision.standDown && decision.reason === 'no-active-standdown') {
+      return { ...decision, reason: 'self-click-lifted' };
+    }
 
     if (!decision.standDown || relayed.length === 0) {
       return decision;
@@ -512,9 +604,17 @@ function isTabLanding(value: unknown): value is TabLanding {
   }
 
   const landing = value as Record<string, unknown>;
+  const hasSelf = landing.self !== undefined;
   return (
     typeof landing.lastAt === 'number' &&
-    isLandingRecord({ v: 1, host: landing.host, at: landing.at, matches: landing.matches })
+    (hasSelf ? typeof landing.selfAt === 'number' : landing.selfAt === undefined) &&
+    isLandingRecord({
+      v: 1,
+      host: landing.host,
+      at: landing.at,
+      matches: landing.matches,
+      ...(hasSelf ? { self: landing.self } : {}),
+    })
   );
 }
 
@@ -574,6 +674,7 @@ function sessionOptions(opts: CreateRelayStanddownOptions) {
     selfExemptionScope?: 'policy' | 'session';
     sessionExemptionTtlMs?: number;
     sessionKey?: (url: string) => string | undefined;
+    selfClickLift?: 'off' | 'same-network';
   } = {};
 
   if (opts.auditLog !== undefined) {
@@ -590,6 +691,10 @@ function sessionOptions(opts: CreateRelayStanddownOptions) {
 
   if (opts.sessionKey !== undefined) {
     sessionOpts.sessionKey = opts.sessionKey;
+  }
+
+  if (opts.selfClickLift !== undefined) {
+    sessionOpts.selfClickLift = opts.selfClickLift;
   }
 
   return sessionOpts;

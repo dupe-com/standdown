@@ -44,6 +44,13 @@ export interface CaptureLandingOptions {
   readonly selfPatterns?: readonly SelfExemption[];
   /** Extra tracking hosts on top of each policy's `detection.trackingHosts`. */
   readonly trackingHosts?: readonly DomainRule[];
+  /**
+   * Must match the background's `selfClickLift`. When `'same-network'`, an own
+   * click (a scoped `selfPatterns` match) is reported to the background as
+   * `self` so it can lift that network's earlier stand-down. Off by default:
+   * own clicks are then only exempted, exactly as before.
+   */
+  readonly selfClickLift?: 'off' | 'same-network';
   /** How long a stored record is re-sent after a same-tab reload. */
   readonly maxAgeMs?: number;
   /** Delay before the single retry when the background isn't listening yet. */
@@ -81,11 +88,14 @@ export function captureLanding(opts: CaptureLandingOptions): CaptureLandingResul
   }
 
   const at = now();
-  const matches = matchLanding(opts, new URL(href), host, win.document.referrer);
-  let record: LandingRecord = { v: 1, host, at, matches };
+  const found = matchLanding(opts, new URL(href), host, win.document.referrer);
+  const matches = found.matches;
+  const self = opts.selfClickLift === 'same-network' ? found.self : [];
+  let record: LandingRecord =
+    self.length > 0 ? { v: 1, host, at, matches, self } : { v: 1, host, at, matches };
 
   try {
-    if (matches.length > 0) {
+    if (matches.length > 0 || self.length > 0) {
       win.sessionStorage?.setItem(RELAY_SESSION_STORAGE_KEY, JSON.stringify(record));
     } else {
       const stored = parseStored(win.sessionStorage?.getItem(RELAY_SESSION_STORAGE_KEY));
@@ -109,10 +119,11 @@ function matchLanding(
   url: URL,
   host: string,
   referrer: string | undefined,
-): LandingMatch[] {
+): { matches: LandingMatch[]; self: string[] } {
   const referrerUrl = referrer ? safeUrl(referrer) : undefined;
   const referrerHost = referrerUrl?.hostname.toLowerCase();
   const matches: LandingMatch[] = [];
+  const self: string[] = [];
 
   for (const policy of opts.policies) {
     const tracking = [...(policy.detection.trackingHosts ?? []), ...(opts.trackingHosts ?? [])];
@@ -135,6 +146,7 @@ function matchLanding(
     // detection does. One in the referrer only exempts the referrer's own
     // params: it must never hide a competitor's param in this page's URL.
     if (hostEligible && isSelfExempt(opts.selfPatterns, policy, url.searchParams)) {
+      self.push(policy.id);
       continue;
     }
 
@@ -161,7 +173,7 @@ function matchLanding(
     }
   }
 
-  return matches;
+  return { matches, self };
 }
 
 function isSelfExempt(

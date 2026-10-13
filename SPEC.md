@@ -111,10 +111,12 @@ class StanddownSession {
     auditLog?: boolean
     selfExemptionScope?: 'policy' | 'session'
     sessionKey?: (url: string) => string | undefined        // state bucket; defaults to the landing hostname
+    selfClickLift?: 'off' | 'same-network'   // default 'off'; see "Own-click lift"
   })
   async ingest(signals: Signals, policies: StanddownPolicy[]): Promise<Decision>
   resolveSessionKey(url: string): string | undefined              // the key ingest files state under
   async shouldStandDown(advertiserHost: string, now: number): Promise<Decision>
+  async liftForSelfClick(input: { url, policyIds, clickAt, now }, policies): Promise<boolean> // selfClickLift only
   async recordActivity(now: number): Promise<void>               // feeds inactivity windows
   async exportAuditLog(): Promise<AuditEntry[]>
 }
@@ -158,6 +160,40 @@ Session-scope invariants: it is network-precise (a different network on the same
 host still stands down); it never lifts an already-active stand-down (no
 exemption is recorded while one is active — monotone toward suppression); and a
 `disableHosts` match is never exempted.
+
+### Own-click lift (`selfClickLift`, opt-in)
+
+**In short:** off by default. When on, a shopper who clicks the integrator's
+own link on the same network ends that network's earlier stand-down, because
+the network now credits the integrator's click.
+
+Rationale: networks credit the most recent click (CJ: "each new cjevent value
+overwrites the existing cookie so the most recent click is credited",
+https://docs.cj.com/docs/http-cookie). Once the shopper's latest click on a
+network is the integrator's own, standing down for an earlier competitor on that
+same network protects nobody. A different network's attribution is not moved by
+that click, so it is never lifted.
+
+With `selfClickLift: 'same-network'`, a scoped `selfPatterns` match on the
+current navigation deletes the session record it is filed under (the
+`sessionKey` bucket, else the host), decision reason
+`self-click-lifted`, only when **all** hold:
+
+- every policy that fed the record (`SessionRecord.policyIds`) is the own
+  click's policy or on its network (a record written before `policyIds` existed
+  is never lifted);
+- the record's latest referral (`max(startedAt, lastActivityAt)`) is strictly
+  older than the own click;
+- nothing else matched this navigation (a competing param, cookie or redirect
+  blocks it);
+- no contributing policy's `disableHosts` covers the host.
+
+The lift runs before session-exemption bookkeeping, so with `selfExemptionScope:
+'session'` the own click's exemption is then recorded as usual (its lingering
+cookie doesn't re-arm the stand-down). A later competitor referral stands down
+again as normal. `liftForSelfClick()` applies the same rules for an own click
+seen on an earlier page (used by `standdown/relay`, whose capture reports own
+clicks as policy ids only when its own `selfClickLift` matches the background's).
 
 ### webext adapter
 

@@ -22,6 +22,17 @@ New opt-in entry point. Nothing changes for hosts that don't use it.
 - `Decision.matchKind?: 'landing'`, set only by the relay when the stand-down came
   from a captured param that is no longer in the URL.
 
+- `selfClickLift: 'same-network'` (opt-in, default `'off'`) on `StanddownSession`
+  and every adapter, plus `StanddownSession.liftForSelfClick()`. When the
+  shopper's latest click on a network is the host's own, that network's earlier
+  stand-down ends (`reason: 'self-click-lifted'`), since the network now credits
+  that click. Never lifts another network's stand-down, a record several
+  networks fed, a referral newer than the own click, a navigation with a
+  competing signal, or a `disableHosts` host. Session records now track every
+  contributing policy (`SessionRecord.policyIds`); records saved before that are
+  never lifted. The relay capture reports own clicks as policy ids only (no
+  values) when its own `selfClickLift` is on.
+
 ### Changed
 
 - **`cjPolicy` no longer stands down on the `cje` / `cjevent_dc` cookies**
