@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (minor)
+## 0.4.0 - 2026-10-13
 
 New opt-in `standdown/relay` entry point and `selfClickLift`, plus a few default
 changes listed under *Upgrading from 0.3.x*.
@@ -45,25 +45,20 @@ test suite compiles unchanged). What existing users will notice:
   policies), used only by the relay for cross-host forwards.
 - `Decision.matchKind?: 'landing'`, set only by the relay when the stand-down came
   from a captured param that is no longer in the URL.
-
 - `selfClickLift: 'same-network'` (opt-in, default `'off'`) on `StanddownSession`
-  and the `content`, `webext` and `relay` adapters, plus `StanddownSession.liftForSelfClick()`
-  and `Signals.selfClickAt`. When the
+  and the `content`, `webext` and `relay` adapters, plus
+  `StanddownSession.liftForSelfClick()` and `Signals.selfClickAt`. When the
   shopper's latest click on a network is the host's own, that network's earlier
   stand-down ends (`reason: 'self-click-lifted'`), since the network now credits
-  that click. Only a fresh navigation counts as a click (a reload,
-  back/forward or re-check of a URL still carrying the own param never lifts):
-  adapters pass `selfClickAt` for fresh navigations only, and `ingest` lifts
-  only when it is set. The own click must name exactly one network (use a
-  distinct own-click value per network). A record the `universal` catch-all
-  fed, or one a `disableHosts` match fed (`SessionRecord.disabledHost`), is
-  never lifted; `SessionRecord.lastReferralAt` dates the latest referral. Never lifts another network's stand-down, a record several
-  networks fed, a referral newer than the own click, a navigation with a
-  competing signal, or a `disableHosts` host. Session records now track every
-  contributing policy (`SessionRecord.policyIds`); records saved before that are
-  never lifted. The relay capture reports own clicks as policy ids only (no
-  values) when its own `selfClickLift` is on.
-
+  that click. Only a fresh navigation counts as a click: a reload, back/forward or
+  re-check of a URL still carrying the own param never lifts. It never lifts
+  another network's stand-down, an own click that names more than one network
+  (use a distinct own-click value per network), a record several networks or the
+  `universal` catch-all fed, a referral newer than the own click, a navigation
+  with a competing signal, or a `disableHosts` stand-down. Session records gain
+  `policyIds`, `lastReferralAt` and `disabledHost`; records saved before that are
+  never lifted. The relay capture reports own clicks as policy ids only, never
+  values.
 - `sessionKey?: (url) => string | undefined` on `StanddownSession` and the
   adapters, plus `StanddownSession.resolveSessionKey()`: share one session across
   a merchant's hosts (`www.`, `checkout.`, alternate ccTLDs). Defaults to the
@@ -74,13 +69,14 @@ test suite compiles unchanged). What existing users will notice:
 - **Landing param names match case-insensitively** (`cjevent`, `CJEVENT`,
   `CjEvent`); values and own-click `selfPatterns` stay exact. `lintPolicies` warns
   on a landing name listed in two casings. (#62)
-- **`cjPolicy` no longer stands down on the `cje` / `cjevent_dc` cookies**
-  (policy version 0.2.0). CJ's software policy names only CJ domains, `afsrc=1`
-  and `cjevent` as evidence of a prior referral, and CJ's `cje` cookie lasts 13
-  months from its last update, so its presence mostly hid the host on visits
-  nobody referred. A referral param the shop strips before `document_idle` is now
-  caught by `standdown/relay` instead. `cjPolicy.detection.cookiePatterns` stays as an
-  empty list, so code that reads or overrides it keeps type-checking. Hosts that still want a CJ cookie rule can
+- **`cjPolicy` stands down correctly: on the referral, not the `cje` /
+  `cjevent_dc` cookie** (policy version 0.2.0). CJ's software policy names only
+  CJ domains, `afsrc=1` and `cjevent` as evidence of a prior referral, and CJ's
+  `cje` cookie lasts 13 months from its last update, so it can't tell this
+  visit's referral from an old one. A referral param the shop strips before
+  `document_idle` is caught by `standdown/relay` instead.
+  `cjPolicy.detection.cookiePatterns` stays as an empty list, so code that reads
+  or overrides it keeps type-checking. Hosts that still want a CJ cookie rule can
   add one to their own policy copy. Rakuten's `lsclick_mid` rule is unchanged:
   Rakuten's policy explicitly requires standing down on it.
 
