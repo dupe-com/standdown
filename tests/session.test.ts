@@ -23,6 +23,17 @@ const behaviors = [
   'no-background-tracking',
 ] as const satisfies readonly Behavior[];
 
+// The exemption-TTL tests need an ambient signal that a live self-exemption
+// suppresses. The bundled CJ policy has no cookie rule, so they use this
+// fixture: CJ plus one lingering cookie name.
+const cjWithLingeringCookie = {
+  ...cjPolicy,
+  detection: {
+    ...cjPolicy.detection,
+    cookiePatterns: [{ name: 'cjevent_dc', match: 'substring' }],
+  },
+} as const satisfies StanddownPolicy;
+
 describe('StanddownSession', () => {
   it('keeps session-or-min stand-downs active while the session store retains them', async () => {
     const session = new StanddownSession(new MemoryStateStore());
@@ -383,7 +394,7 @@ describe('StanddownSession', () => {
     await expect(
       session.ingest(
         { url: 'https://merchant.example/?cjevent=own', now: 0, selfPatterns },
-        [cjPolicy],
+        [cjWithLingeringCookie],
       ),
     ).resolves.toMatchObject({ standDown: false });
 
@@ -396,7 +407,7 @@ describe('StanddownSession', () => {
           now: 60_000,
           cookieNames: ['cjevent_dc'],
         },
-        [cjPolicy],
+        [cjWithLingeringCookie],
       ),
     ).resolves.toMatchObject({ standDown: false });
 
@@ -409,7 +420,7 @@ describe('StanddownSession', () => {
           now: 1_800_001,
           cookieNames: ['cjevent_dc'],
         },
-        [cjPolicy],
+        [cjWithLingeringCookie],
       ),
     ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
   });
@@ -425,7 +436,7 @@ describe('StanddownSession', () => {
 
     await session.ingest(
       { url: 'https://merchant.example/?cjevent=own', now: 0, selfPatterns },
-      [cjPolicy],
+      [cjWithLingeringCookie],
     );
 
     // Well past any default window, the exemption still re-attributes the
@@ -437,7 +448,7 @@ describe('StanddownSession', () => {
           now: 10 * 60 * 60 * 1_000,
           cookieNames: ['cjevent_dc'],
         },
-        [cjPolicy],
+        [cjWithLingeringCookie],
       ),
     ).resolves.toMatchObject({ standDown: false });
   });
@@ -453,7 +464,7 @@ describe('StanddownSession', () => {
     });
     await first.ingest(
       { url: 'https://merchant.example/?cjevent=own', now: 0, selfPatterns },
-      [cjPolicy],
+      [cjWithLingeringCookie],
     );
 
     // A fresh session over the same persisted state: the exemption is reloaded
@@ -471,7 +482,7 @@ describe('StanddownSession', () => {
           now: 1_800_001,
           cookieNames: ['cjevent_dc'],
         },
-        [cjPolicy],
+        [cjWithLingeringCookie],
       ),
     ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
   });

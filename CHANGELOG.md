@@ -22,8 +22,20 @@ New opt-in entry point. Nothing changes for hosts that don't use it.
 - `Decision.matchKind?: 'landing'`, set only by the relay when the stand-down came
   from a captured param that is no longer in the URL.
 
+### Changed
+
+- **`cjPolicy` no longer stands down on the `cje` / `cjevent_dc` cookies**
+  (policy version 0.2.0). CJ's software policy names only CJ domains, `afsrc=1`
+  and `cjevent` as evidence of a prior referral, and CJ's `cje` cookie lasts 13
+  months from its last update, so its presence mostly hid the host on visits
+  nobody referred. A referral param the shop strips before `document_idle` is now
+  caught by `standdown/relay` instead. Hosts that still want a CJ cookie rule can
+  add one to their own policy copy. Rakuten's `lsclick_mid` rule is unchanged:
+  Rakuten's policy explicitly requires standing down on it.
+
 ### Fixed
 
+- `POLICIES.md` listed CJ's minimum as 30 minutes; the policy has always used 60.
 - A `session-or-min` stand-down's minimum (CJ: 60 minutes) now counts from the
   **latest** referral rather than the first, when a persistent store carries it
   across a browser restart. A shopper referred at 2:00 and again at 2:50 who

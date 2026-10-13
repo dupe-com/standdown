@@ -15,7 +15,7 @@ suppression behaviors (`suppress-prompts`, `no-cookie-write`, `no-redirect`,
 
 | Policy | Signals | Stand-down | Activation | Primary citation |
 | --- | --- | --- | --- | --- |
-| `cj` | `cjevent`, `cjdata`, `utm_source=cj`, `sf_cs=cj`, `afsrc=1`, CJ rotating domains, `cje` / `cjevent_dc` cookie names | Session-or-minimum 30m | User click | https://www.cj.com/legal/software-policy and https://github.com/piedotorg/standdown-domains |
+| `cj` | `cjevent`, `cjdata`, `utm_source=cj`, `sf_cs=cj`, `afsrc=1`, CJ rotating domains (no cookie rules: CJ's policy lists none, and its `cje` cookie lasts 13 months, see https://docs.cj.com/docs/http-cookie) | Session-or-minimum 60m | User click | https://www.cj.com/legal/software-policy and https://github.com/piedotorg/standdown-domains |
 | `impact` | `afsrc=1`, `irclickid`, `irgwc`, `im_ref` cookie names | Session-or-minimum 30m | User click | https://impact.com/stand-down-policy.ihtml |
 | `rakuten` | `ranMID` + `ranEAID` + `ranSiteID`, `ranEAID` + `ranSiteID`, `ranEAID`, `ranSiteID`, `siteID`, LinkSynergy/JRS redirect domains, LinkShare cookie names | Session-or-minimum with CoC fallback minimum | User click | https://github.com/rakutenrewards/PublisherStandown-SDK |
 | `awin` | `awc`, `utm_source=aw`, `source=aw`, `awin1.com` | CoC defaults | User click | https://success.awin.com/s/article/Downloadable-Software-Guidelines, https://success.awin.com/s/article/Soft-Click-Cookie-Status, and https://github.com/piedotorg/standdown-domains |

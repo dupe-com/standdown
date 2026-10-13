@@ -472,7 +472,16 @@ describe('detect', () => {
         cookieNames: ['prefix_cje_suffix'],
         redirectChain: ['https://www.dpbolvw.net/click'],
       },
-      [cjPolicy],
+      // Bundled CJ has no cookie rule; add one so all three kinds are present.
+      [
+        {
+          ...cjPolicy,
+          detection: {
+            ...cjPolicy.detection,
+            cookiePatterns: [{ name: 'cje', match: 'substring' }],
+          },
+        },
+      ],
     );
 
     expect(detection.matched.map((match) => match.kind)).toEqual([

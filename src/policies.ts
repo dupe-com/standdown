@@ -30,7 +30,7 @@ export const cocDefaults = {
 export const cjPolicy = {
   id: 'cj',
   schemaVersion: 3,
-  policyVersion: '0.1.0',
+  policyVersion: '0.2.0',
   network: {
     id: 'cj',
     name: 'CJ Affiliate',
@@ -77,10 +77,10 @@ export const cjPolicy = {
       { pattern: 'vofzpwh.com', kind: 'suffix', comment: 'CJ rotating domain' },
       { pattern: 'yceml.net', kind: 'suffix', comment: 'CJ rotating domain' },
     ],
-    cookiePatterns: [
-      { name: 'cje', match: 'substring' },
-      { name: 'cjevent_dc', match: 'substring' },
-    ],
+    // No cookie rules. CJ's software policy names only CJ domains, afsrc=1 and
+    // cjevent as evidence of a prior referral, and the merchant's `cje` cookie
+    // lives 13 months from its last update, so its presence can't tell this
+    // visit's referral from one a year ago.
   },
   standdown: {
     scope: 'advertiser',
@@ -93,7 +93,7 @@ export const cjPolicy = {
     sourceUrl: 'https://www.cj.com/legal/software-policy',
     lastVerified: LAST_VERIFIED,
     notes:
-      'CJ policy cites CJ domains, afsrc=1, and cjevent; rotating domain list is attributed to piedotorg/standdown-domains. Minimum stand-down duration (60m) is calibrated to production enforcement (Dupe standDownCookieDuration=60).',
+      'CJ policy cites CJ domains, afsrc=1, and cjevent; rotating domain list is attributed to piedotorg/standdown-domains. No cookie rules: the policy lists no cookie signal, and CJ\'s cje cookie lasts 13 months (https://docs.cj.com/docs/http-cookie). Minimum stand-down duration (60m) is calibrated to production enforcement (Dupe standDownCookieDuration=60).',
   },
 } as const satisfies StanddownPolicy;
 

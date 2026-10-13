@@ -177,7 +177,7 @@ Every pack entry carries `metadata.sourceUrl` + `lastVerified: '2026-07-10'`. Se
 
 | Pack | Landing params | Redirect domains | Cookies | Stand-down | Activation |
 |---|---|---|---|---|---|
-| `cj` | `cjevent`; corroborating: `cjdata`, `utm_source=cj`, `sf_cs=cj`; `afsrc=1` | dpbolvw.net, anrdoezrs.net, jdoqocy.com, kqzyfj.com, tkqlhce.com, qksrv.net, awltovhc.com, lduhtrp.net (+ full ~21 from Pie list) | `cje`, `cjevent_dc` (substring) | session-or-min 60m | user-click |
+| `cj` | `cjevent`; corroborating: `cjdata`, `utm_source=cj`, `sf_cs=cj`; `afsrc=1` | dpbolvw.net, anrdoezrs.net, jdoqocy.com, kqzyfj.com, tkqlhce.com, qksrv.net, awltovhc.com, lduhtrp.net (+ full ~21 from Pie list) | — (none; see POLICIES.md) | session-or-min 60m | user-click |
 | `impact` | `afsrc=1` (canonical), `irclickid` | (per-merchant) | `im_ref` (substring) | session-only | user-click |
 | `rakuten` | `ranMID`+`ranEAID`+`ranSiteID` OR-groups `siteID` | click.linksynergy.com, linksynergy.* | `lsclick_mid*`, `*linkshare*` (substring) | session-only | user-click |
 | `awin` | `awc`; corroborating `utm_source=aw`, `source=aw` | awin1.com | — | session-or-min | user-click |
