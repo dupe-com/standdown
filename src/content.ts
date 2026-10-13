@@ -1,5 +1,5 @@
 import { freshNavigationStart, type NavigationTimingLike } from './navigation';
-import { StanddownSession } from './session';
+import { pickSessionOptions, StanddownSession } from './session';
 import {
   LocalStorageTtlStateStore,
   SessionStorageStateStore,
@@ -125,7 +125,7 @@ export function createContentStanddown(
   const windowLike = opts.window ?? currentWindow();
   const now = opts.now ?? Date.now;
   const store = opts.store ?? createContentStore(windowLike, opts, now);
-  const session = new StanddownSession(store, contentSessionOptions(opts));
+  const session = new StanddownSession(store, pickSessionOptions(opts));
 
   let disposed = false;
   let pending = false;
@@ -299,47 +299,6 @@ export function cookieNamesFromString(cookie: string): string[] {
     .filter((name) => name.length > 0);
 }
 
-function contentSessionOptions(
-  opts: CreateContentStanddownOptions,
-):
-  | {
-      auditLog?: boolean;
-      selfExemptionScope?: 'policy' | 'session';
-      sessionExemptionTtlMs?: number;
-      sessionKey?: (url: string) => string | undefined;
-      selfClickLift?: 'off' | 'same-network';
-    }
-  | undefined {
-  const sessionOpts: {
-    auditLog?: boolean;
-    selfExemptionScope?: 'policy' | 'session';
-    sessionExemptionTtlMs?: number;
-    sessionKey?: (url: string) => string | undefined;
-    selfClickLift?: 'off' | 'same-network';
-  } = {};
-
-  if (opts.auditLog !== undefined) {
-    sessionOpts.auditLog = opts.auditLog;
-  }
-
-  if (opts.selfExemptionScope !== undefined) {
-    sessionOpts.selfExemptionScope = opts.selfExemptionScope;
-  }
-
-  if (opts.sessionExemptionTtlMs !== undefined) {
-    sessionOpts.sessionExemptionTtlMs = opts.sessionExemptionTtlMs;
-  }
-
-  if (opts.sessionKey !== undefined) {
-    sessionOpts.sessionKey = opts.sessionKey;
-  }
-
-  if (opts.selfClickLift !== undefined) {
-    sessionOpts.selfClickLift = opts.selfClickLift;
-  }
-
-  return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;
-}
 
 function createContentStore(
   windowLike: ContentWindowLike | undefined,

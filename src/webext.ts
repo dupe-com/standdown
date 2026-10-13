@@ -1,5 +1,5 @@
 import { verifyPolicyBundle } from './bundle';
-import { StanddownSession } from './session';
+import { pickSessionOptions, StanddownSession } from './session';
 import {
   ChromeLocalStateStore,
   type ChromeRuntimeLike,
@@ -216,7 +216,7 @@ export function createStanddown(
       sessionId: opts.sessionId,
       now,
     });
-  const session = new StanddownSession(store, sessionOptions(opts));
+  const session = new StanddownSession(store, pickSessionOptions(opts));
   const redirectChains = new Map<number, string[]>();
   const redirectRequestIds = new Map<number, string>();
   const initiators = new Map<number, string>();
@@ -506,47 +506,6 @@ export function createStanddown(
   };
 }
 
-function sessionOptions(
-  opts: CreateStanddownOptions,
-):
-  | {
-      auditLog?: boolean;
-      selfExemptionScope?: 'policy' | 'session';
-      sessionExemptionTtlMs?: number;
-      sessionKey?: (url: string) => string | undefined;
-      selfClickLift?: 'off' | 'same-network';
-    }
-  | undefined {
-  const sessionOpts: {
-    auditLog?: boolean;
-    selfExemptionScope?: 'policy' | 'session';
-    sessionExemptionTtlMs?: number;
-    sessionKey?: (url: string) => string | undefined;
-    selfClickLift?: 'off' | 'same-network';
-  } = {};
-
-  if (opts.auditLog !== undefined) {
-    sessionOpts.auditLog = opts.auditLog;
-  }
-
-  if (opts.selfExemptionScope !== undefined) {
-    sessionOpts.selfExemptionScope = opts.selfExemptionScope;
-  }
-
-  if (opts.sessionExemptionTtlMs !== undefined) {
-    sessionOpts.sessionExemptionTtlMs = opts.sessionExemptionTtlMs;
-  }
-
-  if (opts.sessionKey !== undefined) {
-    sessionOpts.sessionKey = opts.sessionKey;
-  }
-
-  if (opts.selfClickLift !== undefined) {
-    sessionOpts.selfClickLift = opts.selfClickLift;
-  }
-
-  return Object.keys(sessionOpts).length > 0 ? sessionOpts : undefined;
-}
 
 function createChromeStore(
   chromeApi: ChromeLike | undefined,

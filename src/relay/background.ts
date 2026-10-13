@@ -1,5 +1,5 @@
 import { detect, domainRuleMatchesUrl } from '../detect';
-import { StanddownSession } from '../session';
+import { pickSessionOptions, StanddownSession } from '../session';
 import {
   ChromeLocalStateStore,
   type ChromeRuntimeLike,
@@ -185,7 +185,7 @@ export function createRelayStanddown(
   const toBase = opts.baseDomain ?? defaultBaseDomain;
   const relayStorage = opts.relayStorage ?? chromeApi?.storage?.session;
   const store = opts.store ?? defaultStore(chromeApi, now);
-  const session = new StanddownSession(store, sessionOptions(opts));
+  const session = new StanddownSession(store, pickSessionOptions(opts));
   const policyById = new Map(opts.policies.map((policy) => [policy.id, policy]));
   const liftOn = opts.selfClickLift === 'same-network';
   const sameNetwork = (a: string, b: string) =>
@@ -244,10 +244,21 @@ export function createRelayStanddown(
     return rules.some((rule) => domainRuleMatchesUrl(rule, host));
   }
 
-  /** Matches from `landing` that carry over to `host` at time `at`. */
-  function carried(landing: TabLanding, host: string, at: number): LandingMatch[] {
+  /**
+   * Which of a landing's items carry over to `host` at `at`: all of them on the
+   * same host; none after the hop window; otherwise those on the same base
+   * domain or forwarded from a tracking host. Shared by referral params and own
+   * clicks so both always follow the same rule.
+   */
+  function carriesOver<T>(
+    landing: TabLanding,
+    host: string,
+    at: number,
+    items: readonly T[],
+    policyIdOf: (item: T) => string,
+  ): T[] {
     if (landing.host === host) {
-      return [...landing.matches];
+      return [...items];
     }
 
     if (at - landing.lastAt > hopWindowMs) {
@@ -255,23 +266,17 @@ export function createRelayStanddown(
     }
 
     const sameBase = toBase(landing.host) === toBase(host);
-    return landing.matches.filter((match) => sameBase || isTracking(match, landing.host));
+    return items.filter((item) => sameBase || isTracking({ policyId: policyIdOf(item) }, landing.host));
   }
 
-  /** The own-click policies from `landing` that carry over to `host` (same rules). */
+  /** Referral matches from `landing` that carry over to `host` at time `at`. */
+  function carried(landing: TabLanding, host: string, at: number): LandingMatch[] {
+    return carriesOver(landing, host, at, landing.matches, (match) => match.policyId);
+  }
+
+  /** The own-click policies from `landing` that carry over to `host` (same rule). */
   function carriedSelf(landing: TabLanding, host: string, at: number): string[] {
-    const self = landing.self ?? [];
-
-    if (landing.host === host) {
-      return [...self];
-    }
-
-    if (at - landing.lastAt > hopWindowMs) {
-      return [];
-    }
-
-    const sameBase = toBase(landing.host) === toBase(host);
-    return self.filter((policyId) => sameBase || isTracking({ policyId }, landing.host));
+    return carriesOver(landing, host, at, landing.self ?? [], (policyId) => policyId);
   }
 
   /**
@@ -692,37 +697,6 @@ function defaultStore(chromeApi: RelayChromeLike | undefined, now: () => number)
   return new ChromeLocalStateStore(local, storeOptions);
 }
 
-function sessionOptions(opts: CreateRelayStanddownOptions) {
-  const sessionOpts: {
-    auditLog?: boolean;
-    selfExemptionScope?: 'policy' | 'session';
-    sessionExemptionTtlMs?: number;
-    sessionKey?: (url: string) => string | undefined;
-    selfClickLift?: 'off' | 'same-network';
-  } = {};
-
-  if (opts.auditLog !== undefined) {
-    sessionOpts.auditLog = opts.auditLog;
-  }
-
-  if (opts.selfExemptionScope !== undefined) {
-    sessionOpts.selfExemptionScope = opts.selfExemptionScope;
-  }
-
-  if (opts.sessionExemptionTtlMs !== undefined) {
-    sessionOpts.sessionExemptionTtlMs = opts.sessionExemptionTtlMs;
-  }
-
-  if (opts.sessionKey !== undefined) {
-    sessionOpts.sessionKey = opts.sessionKey;
-  }
-
-  if (opts.selfClickLift !== undefined) {
-    sessionOpts.selfClickLift = opts.selfClickLift;
-  }
-
-  return sessionOpts;
-}
 
 function failClosedDecision(reason: string): Decision {
   return { standDown: true, reason, behaviors: [...FAIL_CLOSED_BEHAVIORS] };

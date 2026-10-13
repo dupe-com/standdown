@@ -536,6 +536,27 @@ describe('relay: selfClickLift', () => {
     await expect(h.query('https://shop.example/cart', 3_100)).resolves.toMatchObject({ standDown: false });
   });
 
+  it('carries our own click forwarded from a policy tracking host, like a referral', async () => {
+    const tracked = {
+      ...cjPolicy,
+      detection: { ...cjPolicy.detection, trackingHosts: [{ pattern: 'go.tracker.example', kind: 'suffix' as const }] },
+    };
+    const h = harness({ policies: [tracked, impactPolicy], selfPatterns, selfClickLift: 'same-network' });
+    h.open('https://shop.example/?cjevent=someone-else', 1_000);
+    await h.flush();
+    await expect(h.query('https://shop.example/', 1_100)).resolves.toMatchObject({ standDown: true });
+
+    // Our click lands on the tracking host, which forwards to the shop by script.
+    h.open('https://go.tracker.example/r?cjevent=own-click', 2_000);
+    h.open('https://shop.example/', 2_500, 'https://go.tracker.example/');
+    await h.flush();
+
+    await expect(h.query('https://shop.example/', 2_600)).resolves.toMatchObject({
+      standDown: false,
+      reason: 'self-click-lifted',
+    });
+  });
+
   it('drops an unqueried earlier CJ landing in the tab once our own CJ click lands', async () => {
     const h = lifting();
     h.open('https://shop.example/?cjevent=someone-else', 1_000);

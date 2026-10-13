@@ -29,6 +29,39 @@ export class MemoryStateStore implements StateStore {
   }
 }
 
+/** Session options an adapter passes straight through to `StanddownSession`. */
+export interface AdapterSessionOptions {
+  readonly auditLog?: boolean;
+  readonly selfExemptionScope?: 'policy' | 'session';
+  readonly sessionExemptionTtlMs?: number;
+  readonly sessionKey?: (url: string) => string | undefined;
+  readonly selfClickLift?: 'off' | 'same-network';
+}
+
+// Every adapter-facing option, once. `satisfies` makes adding an option to
+// AdapterSessionOptions without listing it here a compile error, so no adapter
+// can silently drop a new option (the relay once missed `sessionKey` that way).
+const ADAPTER_SESSION_OPTION_KEYS = {
+  auditLog: true,
+  selfExemptionScope: true,
+  sessionExemptionTtlMs: true,
+  sessionKey: true,
+  selfClickLift: true,
+} as const satisfies Record<keyof AdapterSessionOptions, true>;
+
+/** The session options set on an adapter's options object, or `undefined` if none. */
+export function pickSessionOptions(opts: AdapterSessionOptions): AdapterSessionOptions | undefined {
+  const picked: Record<string, unknown> = {};
+
+  for (const key of Object.keys(ADAPTER_SESSION_OPTION_KEYS) as (keyof AdapterSessionOptions)[]) {
+    if (opts[key] !== undefined) {
+      picked[key] = opts[key];
+    }
+  }
+
+  return Object.keys(picked).length > 0 ? (picked as AdapterSessionOptions) : undefined;
+}
+
 export class StanddownSession {
   readonly #store: StateStore;
   readonly #auditLog: boolean;
