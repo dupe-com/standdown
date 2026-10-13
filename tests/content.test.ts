@@ -247,6 +247,40 @@ describe('content adapter', () => {
     controller.dispose();
   });
 
+  it('resolves an argument-less shouldStandDown through a configured sessionKey', async () => {
+    const controller = createContentStanddown({
+      policies: [cjPolicy],
+      window: new FakeContentWindow(
+        'https://www.merchant.example/?cjevent=abc',
+        '',
+      ),
+      now: () => 5_000,
+      // Collapse a merchant's hosts onto one advertiser key.
+      sessionKey: (url) =>
+        new URL(url).hostname.endsWith('merchant.example')
+          ? 'merchant.example'
+          : undefined,
+    });
+
+    await expect(controller.ready).resolves.toMatchObject({
+      standDown: true,
+      policyId: 'cj',
+    });
+
+    // The read resolves the current location the same way the evaluation did,
+    // so it lands on the bucket state was filed under.
+    await expect(controller.shouldStandDown()).resolves.toMatchObject({
+      standDown: true,
+      policyId: 'cj',
+    });
+    // And that bucket is the resolver's key, not the www host it landed on.
+    await expect(
+      controller.shouldStandDown('merchant.example'),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+
+    controller.dispose();
+  });
+
   it('fails closed when content storage fails', async () => {
     const controller = createContentStanddown({
       policies: [cjPolicy],

@@ -170,6 +170,27 @@ describe('url adapter', () => {
     expect(decisions.at(-1)?.referrerClass).toBe('own-site');
   });
 
+  it('shares stand-down state across hosts that resolve to one session key', async () => {
+    const controller = createUrlStanddown({
+      policies: [cjPolicy],
+      now: () => 1_000,
+      // Collapse a merchant's hosts onto one advertiser key.
+      sessionKey: (url) =>
+        new URL(url).hostname.endsWith('merchant.example')
+          ? 'merchant.example'
+          : undefined,
+    });
+
+    await expect(
+      controller.decideForUrl('https://www.merchant.example/?cjevent=abc'),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+
+    // A sibling host reads the bucket the first decision filed state under.
+    await expect(
+      controller.decideForUrl('https://checkout.merchant.example/pay'),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'cj' });
+  });
+
   it('fails toward standing down on a missing URL', async () => {
     const controller = createUrlStanddown({
       policies: [cjPolicy],
