@@ -31,6 +31,7 @@ published, with types included. Extension contexts need a bundler (see
 | `standdown/webext` | Manifest V3 background/service-worker adapter |
 | `standdown/content` | Content-script signal collector and evaluator |
 | `standdown/url` | URL-only decision helper for background/side-panel contexts (no live page) |
+| `standdown/relay/capture` + `standdown/relay/background` | Early landing capture at `document_start`, decided in the background, without `webNavigation` |
 
 ## Choosing an adapter
 
@@ -43,6 +44,7 @@ that can't hold (or add) `webNavigation`/`webRequest` must use `content`.
 | MV3 **without** those permissions, or that can't add them, or whose detection already runs in a content script | `standdown/content` |
 | Safari, or any page-/content-script-only context | `standdown/content` |
 | A background worker or native side panel deciding from a **tab's URL** (no live page, no `document`, no first-party cookies) | `standdown/url` |
+| MV3 **without** `webNavigation`, on shops that strip referral params before `document_idle` | `standdown/relay` (capture + background) |
 
 `createStanddown()` (the `webext` adapter) **requires** `chrome.webNavigation.onCommitted`
 and throws if it's absent — an adapter that observes no navigations would fail
@@ -196,6 +198,111 @@ State defaults to an in-memory store (fitting a stateless worker); pass a durabl
 `store` to carry stand-downs across worker restarts. The lower-level
 `collectUrlSignals(url, opts)` is exported if you want to drive
 `StanddownSession.ingest` yourself.
+
+## Relay adapter
+
+Some shops strip the referral param (`?cjevent=abc`) with `history.replaceState`,
+or forward to a clean URL by script, before `document_idle`. A content script
+that reads `location` at idle then sees a clean URL and reports "not referred".
+`webext` would see the param, but needs `webNavigation`. The relay closes that
+gap with no new permission: a tiny `document_start` capture plus a background
+decision.
+
+**Manifest** (nothing beyond host access you already have and `storage`):
+
+```json
+{
+  "permissions": ["storage"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["<your existing host matches>"],
+      "js": ["relay-capture.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}
+```
+
+**`relay-capture.js`** (bundle it; keep it to this):
+
+```ts
+import { allPolicies } from 'standdown/policies';
+import { captureLanding } from 'standdown/relay/capture';
+
+captureLanding({
+  policies: allPolicies,
+  selfPatterns: [{ name: 'my_click_id', networkId: 'cj' }],
+});
+```
+
+**Background:**
+
+```ts
+import { allPolicies } from 'standdown/policies';
+import { createRelayStanddown } from 'standdown/relay/background';
+
+const relay = createRelayStanddown({
+  policies: allPolicies,
+  selfPatterns: [{ name: 'my_click_id', networkId: 'cj' }],
+  publisherSites: ['your-site.com'],
+});
+```
+
+**Query** from any content script (the tab comes from `sender.tab.id`):
+
+```ts
+const { decision } = await chrome.runtime.sendMessage({
+  type: 'standdown:relay:shouldStandDown',
+  url: location.href,
+});
+if (decision.standDown) return; // decision.matchKind === 'landing' when the param was stripped
+```
+
+What happens:
+
+- **Capture** reads `location.href` and `document.referrer` before page scripts
+  run, matches each policy's `landingParams` (values are compared in the page,
+  so `equals` rules and your own-click `selfPatterns` work), and keeps only
+  `{ v, host, at, matches: [{ policyId, params: [names] }] }` — never a URL, a
+  path, or a param value. It mirrors that to `sessionStorage` (survives a
+  same-tab reload) and sends it to the background, retrying once if the worker
+  isn't listening yet. The referrer counts only when it is on the same base
+  domain (a same-origin script forward keeps the full referrer) or a tracking host.
+- **Background** keys records by `sender.tab.id` (top frame only) in
+  `chrome.storage.session`, deletes them on `tabs.onRemoved`, and answers by
+  replaying the matched param names into the regular `StanddownSession`, so
+  session rules, self-exemption and `disableHosts` behave exactly as elsewhere.
+  A stand-down caused by a param no longer in the URL carries
+  `matchKind: 'landing'`.
+- **Cross-host forwards** (`link.shop.example?cjevent=abc` → script →
+  `www.shop.example`) carry over in the same tab when the next page arrives within
+  `hopWindowMs` and the earlier host shares the base domain or matches a
+  `trackingHosts` rule (on the policy's `detection.trackingHosts`, or the
+  `trackingHosts` option). A param seen on an unrelated site does not carry over;
+  landing on an unrelated site drops the record.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `maxAgeMs` | 30 min | How long a landing record counts. It also ends when the tab moves to an unrelated site or closes. |
+| `hopWindowMs` | 10 s | How soon a forward to another same-base / tracking host must land to carry the record. |
+| `trackingHosts` | `[]` | Extra `DomainRule`s on top of each policy's `detection.trackingHosts` (empty in bundled policies). |
+| `baseDomain` | 2–3 label heuristic | Swap in a public-suffix-list function if you need exact registrable domains. |
+| `store` | `ChromeLocalStateStore` | Decision state, as for `webext`. |
+
+Permissions: host access you already have and `storage`. It does **not** use
+`webNavigation`, `webRequest`, `tabs` or `scripting`; `sender.tab.id` and
+`tabs.onRemoved` need none of them.
+
+Known limits:
+
+- **Server-side redirect hops** load no page, so nothing in the page can see
+  them. Only `webext` with `webRequest` observes those.
+- URL fragment (`#…`) params are not read.
+- Like `content`, a non-stand-down still carries `degraded: true`.
+- The capture only sees pages your content script matches; on other sites,
+  "moved to an unrelated site" is not observed and `maxAgeMs` bounds the record.
 
 ## Core usage
 

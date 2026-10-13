@@ -590,9 +590,10 @@ function cloneAuditEntry(entry: AuditEntry): AuditEntry {
   return next;
 }
 
-function chromeGet(
+/** @internal Promise wrapper over a callback-or-promise chrome storage area. */
+export function chromeGet(
   storage: ChromeStorageAreaLike,
-  key: string,
+  key: string | null,
   runtime: ChromeRuntimeLike | undefined,
 ): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
@@ -617,7 +618,8 @@ function chromeGet(
   });
 }
 
-function chromeSet(
+/** @internal */
+export function chromeSet(
   storage: ChromeStorageAreaLike,
   items: Record<string, unknown>,
   runtime: ChromeRuntimeLike | undefined,
@@ -625,6 +627,39 @@ function chromeSet(
   return new Promise((resolve, reject) => {
     try {
       const result = storage.set(items, () => {
+        const error = runtime?.lastError;
+
+        if (error !== undefined) {
+          reject(new Error(error.message ?? 'chrome storage error'));
+          return;
+        }
+
+        resolve();
+      });
+
+      if (isPromiseLike(result)) {
+        result.then(resolve, reject);
+      }
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/** @internal */
+export function chromeRemove(
+  storage: ChromeStorageAreaLike,
+  keys: string | string[],
+  runtime: ChromeRuntimeLike | undefined,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (storage.remove === undefined) {
+      resolve();
+      return;
+    }
+
+    try {
+      const result = storage.remove(keys, () => {
         const error = runtime?.lastError;
 
         if (error !== undefined) {

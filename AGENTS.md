@@ -59,6 +59,7 @@ The choice is driven by **permissions, not manifest version.**
 | MV3 extension that holds (and will keep) `webRequest`/`webNavigation` | `standdown/webext` | `createStanddown()` |
 | MV3 extension **without** those permissions, or that can't add them | `standdown/content` | `createContentStanddown()` |
 | Safari / page- or content-script-only | `standdown/content` | `createContentStanddown()` |
+| MV3 **without** `webNavigation`, on shops that strip referral params before `document_idle` | `standdown/relay/capture` + `standdown/relay/background` | `captureLanding()` at `document_start` + `createRelayStanddown()` (see `INSTALL.md` → Relay adapter) |
 | Non-extension or custom host | `standdown` | `StanddownSession` + `guardActivation` |
 
 **Decision rule:** if the extension does not already hold

@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased (minor)
+
+New opt-in entry point. Nothing changes for hosts that don't use it.
+
+### Added
+
+- `standdown/relay/capture` and `standdown/relay/background`: capture the landing
+  at `document_start` and decide in the background, so a referral param a shop
+  strips (`history.replaceState`, or a script forward) before `document_idle`
+  still stands the host down. Needs no new permission (no `webNavigation`,
+  `webRequest`, `tabs` or `scripting`). Keeps only matched param names, the host
+  and a timestamp — never URLs or param values. Defaults: a landing record counts
+  for up to 30 minutes (`maxAgeMs`), ends early on an unrelated navigation or tab
+  close, and carries across a same-base or tracking-host forward within 10 seconds
+  (`hopWindowMs`). Server-side redirect hops remain out of reach (no page loads).
+  Matches landing param names in any casing like detection, keeps own-click
+  matching exact, and accepts the session `sessionKey` option.
+- `policy.detection.trackingHosts?: DomainRule[]` (optional; empty in bundled
+  policies), used only by the relay for cross-host forwards.
+- `Decision.matchKind?: 'landing'`, set only by the relay when the stand-down came
+  from a captured param that is no longer in the URL.
+
 ## 0.3.3 - 2026-07-14
 
 Hardening for `selfExemptionScope: 'session'`, closing the last item of the

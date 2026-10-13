@@ -100,8 +100,8 @@ or `skills/showcase` to grab the others.) The skill pulls the live
 </details>
 
 **Wiring it by hand instead?** The full manual walkthrough and complete API
-reference — the five published surfaces, self-exemption, per-host disable, signed
-refresh, the `standdown/url` helper, interop — live in **[INSTALL.md](./INSTALL.md)**.
+reference — the published surfaces, self-exemption, per-host disable, signed
+refresh, the `standdown/url` helper, the `standdown/relay` early-landing capture, interop — live in **[INSTALL.md](./INSTALL.md)**.
 
 ## What makes it different
 

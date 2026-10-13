@@ -1,0 +1,557 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cjPolicy } from '../src/policies';
+import {
+  createRelayStanddown,
+  type RelayChromeLike,
+  type RelayMessageResponse,
+  type RelaySenderLike,
+} from '../src/relay/background';
+import {
+  type CaptureWindowLike,
+  captureLanding,
+  RELAY_SESSION_STORAGE_KEY,
+  type RelayCaptureMessage,
+} from '../src/relay/capture';
+import type { ChromeStorageAreaLike } from '../src/stores';
+import type { SelfExemption, StanddownPolicy } from '../src/types';
+import { validatePolicy } from '../src/validation';
+
+const TAB = 7;
+
+describe('relay: capture at document_start, decide in background', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('stands down with kind "landing" when the shop strips the param with replaceState before DOMContentLoaded', async () => {
+    const h = harness();
+
+    // document_start: the param is still there.
+    const page = h.open('https://shop.example/product?cjevent=abc', 1_000);
+    // Page script, before DOMContentLoaded: strip it.
+    page.window.location.href = 'https://shop.example/product';
+    await h.flush();
+
+    const decision = await h.query('https://shop.example/product', 1_500);
+
+    expect(decision).toMatchObject({ standDown: true, policyId: 'cj', matchKind: 'landing' });
+  });
+
+  it('baseline: without a capture, the stripped URL alone does not stand down', async () => {
+    const h = harness();
+
+    const decision = await h.query('https://shop.example/product', 1_500);
+
+    expect(decision.standDown).toBe(false);
+    expect(decision.matchKind).toBeUndefined();
+  });
+
+  it('leaves matchKind unset when the param is still in the URL', async () => {
+    const h = harness();
+    h.open('https://shop.example/?cjevent=abc', 1_000);
+    await h.flush();
+
+    const decision = await h.query('https://shop.example/?cjevent=abc', 1_100);
+
+    expect(decision.standDown).toBe(true);
+    expect(decision.matchKind).toBeUndefined();
+  });
+
+  it('stands down when the param is stripped later with pushState', async () => {
+    const h = harness();
+    const page = h.open('https://shop.example/?cjevent=abc', 1_000);
+    await h.flush();
+
+    // Much later, a SPA route change drops the param (same document, no new capture).
+    page.window.location.href = 'https://shop.example/cart';
+
+    await expect(h.query('https://shop.example/cart', 60_000)).resolves.toMatchObject({
+      standDown: true,
+      matchKind: 'landing',
+    });
+  });
+
+  it('stands down after a same-site script redirect (background record path)', async () => {
+    const h = harness();
+    h.open('https://shop.example/?cjevent=abc', 1_000);
+    // Script forward to a clean URL; cross-origin-style referrer (origin only).
+    h.open('https://shop.example/landing', 1_200, 'https://shop.example/');
+    await h.flush();
+
+    await expect(h.query('https://shop.example/landing', 1_300)).resolves.toMatchObject({
+      standDown: true,
+      matchKind: 'landing',
+    });
+  });
+
+  it('stands down after a same-origin script redirect via the full referrer (no prior record)', async () => {
+    const h = harness();
+    // The first page's capture never reached the background (e.g. worker not up),
+    // but the same-origin referrer still carries the param.
+    const page = h.open(
+      'https://shop.example/landing',
+      1_200,
+      'https://shop.example/?cjevent=abc',
+    );
+    await h.flush();
+
+    expect(page.record?.matches).toEqual([{ policyId: 'cj', params: ['cjevent'] }]);
+    await expect(h.query('https://shop.example/landing', 1_300)).resolves.toMatchObject({
+      standDown: true,
+      matchKind: 'landing',
+    });
+  });
+
+  it('stands down when link.<shop> forwards to www.<shop> by script', async () => {
+    const h = harness();
+    h.open('https://link.shop.example/go?cjevent=abc', 1_000);
+    h.open('https://www.shop.example/product', 2_000, 'https://link.shop.example/');
+    await h.flush();
+
+    await expect(h.query('https://www.shop.example/product', 2_500)).resolves.toMatchObject({
+      standDown: true,
+      matchKind: 'landing',
+    });
+    await expect(h.relay.landingFor(TAB, 2_500)).resolves.toMatchObject({
+      host: 'www.shop.example',
+    });
+  });
+
+  it('carries a forward even if the query races ahead of the second capture', async () => {
+    const h = harness();
+    h.open('https://link.shop.example/go?cjevent=abc', 1_000);
+    await h.flush();
+
+    await expect(h.query('https://www.shop.example/product', 2_000)).resolves.toMatchObject({
+      standDown: true,
+      matchKind: 'landing',
+    });
+  });
+
+  it('does not carry a same-base forward that arrives after the hop window', async () => {
+    const h = harness();
+    h.open('https://link.shop.example/go?cjevent=abc', 1_000);
+    h.open('https://www.shop.example/product', 1_000 + 30_000);
+    await h.flush();
+
+    await expect(h.query('https://www.shop.example/product', 31_500)).resolves.toMatchObject({
+      standDown: false,
+    });
+  });
+
+  it('carries from a policy tracking host to the advertiser', async () => {
+    const tracked: StanddownPolicy = {
+      ...cjPolicy,
+      detection: {
+        ...cjPolicy.detection,
+        trackingHosts: [{ pattern: 'click.tracker.example', kind: 'suffix' }],
+      },
+    };
+    const h = harness({ policies: [tracked] });
+    h.open('https://click.tracker.example/r?cjevent=abc', 1_000);
+    h.open('https://shop.example/product', 1_500);
+    await h.flush();
+
+    await expect(h.query('https://shop.example/product', 1_600)).resolves.toMatchObject({
+      standDown: true,
+      matchKind: 'landing',
+    });
+  });
+
+  it('does not carry a param seen on an unrelated site over to the next shop in the same tab', async () => {
+    const h = harness();
+    h.open('https://other.example/?cjevent=abc', 1_000);
+    h.open('https://shop.example/product', 1_500, 'https://other.example/');
+    await h.flush();
+
+    await expect(h.query('https://shop.example/product', 1_600)).resolves.toMatchObject({
+      standDown: false,
+    });
+    await expect(h.relay.landingFor(TAB, 1_600)).resolves.toBeUndefined();
+  });
+
+  it("still exempts the host's own click params, and still stands down on a competing value", async () => {
+    const selfPatterns: SelfExemption[] = [
+      { name: 'cjevent', value: 'own-click', match: 'equals', networkId: 'cj' },
+    ];
+    const own = harness({ selfPatterns });
+    own.open('https://shop.example/?cjevent=own-click', 1_000);
+    await own.flush();
+
+    await expect(own.query('https://shop.example/', 1_500)).resolves.toMatchObject({
+      standDown: false,
+    });
+
+    const competing = harness({ selfPatterns });
+    competing.open('https://shop.example/?cjevent=someone-else', 1_000);
+    await competing.flush();
+
+    await expect(competing.query('https://shop.example/', 1_500)).resolves.toMatchObject({
+      standDown: true,
+      matchKind: 'landing',
+    });
+  });
+
+  it('matches landing param names in any casing, like detection (?CJEVENT=abc stripped)', async () => {
+    const h = harness();
+    const page = h.open('https://shop.example/?CJEVENT=abc', 1_000);
+    page.window.location.href = 'https://shop.example/';
+    await h.flush();
+
+    expect(page.record?.matches).toEqual([{ policyId: 'cj', params: ['cjevent'] }]);
+    await expect(h.query('https://shop.example/', 1_500)).resolves.toMatchObject({
+      standDown: true,
+      matchKind: 'landing',
+    });
+  });
+
+  it('keeps own-click matching exact-case: ?CJEVENT=own-click is not our click', async () => {
+    const selfPatterns: SelfExemption[] = [
+      { name: 'cjevent', value: 'own-click', match: 'equals', networkId: 'cj' },
+    ];
+    const h = harness({ selfPatterns });
+    h.open('https://shop.example/?CJEVENT=own-click', 1_000);
+    await h.flush();
+
+    await expect(h.query('https://shop.example/', 1_500)).resolves.toMatchObject({ standDown: true });
+  });
+
+  it('passes sessionKey through: a later checkout.<shop> visit in another tab still stands down', async () => {
+    const chrome = fakeChrome();
+    const relay = createRelayStanddown({
+      policies: [cjPolicy],
+      chrome,
+      now: () => 0,
+      sessionKey: (url) => new URL(url).hostname.split('.').slice(-2).join('.'),
+    });
+    await relay.ingestCapture(
+      TAB,
+      { v: 1, host: 'www.shop.example', at: 1_000, matches: [{ policyId: 'cj', params: ['cjevent'] }] },
+      1_000,
+    );
+    await expect(relay.shouldStandDown(TAB, 'https://www.shop.example/', 1_000)).resolves.toMatchObject({
+      standDown: true,
+    });
+
+    // Another tab, long after the hop window, on another host of the same shop.
+    await expect(
+      relay.shouldStandDown(TAB + 1, 'https://checkout.shop.example/', 120_000),
+    ).resolves.toMatchObject({ standDown: true, reason: 'active-standdown:cj' });
+  });
+
+  it('expires the landing record after the window', async () => {
+    const h = harness({ maxAgeMs: 5_000 });
+    h.open('https://shop.example/?cjevent=abc', 1_000);
+    await h.flush();
+
+    await expect(h.relay.landingFor(TAB, 5_999)).resolves.toBeDefined();
+    await expect(h.query('https://shop.example/', 6_001)).resolves.toMatchObject({
+      standDown: false,
+    });
+    expect(h.sessionArea.data.has(`standdown:relay:tab:${TAB}`)).toBe(false);
+  });
+
+  it('deletes the landing record when the tab closes', async () => {
+    const h = harness();
+    h.open('https://shop.example/?cjevent=abc', 1_000);
+    await h.flush();
+    expect(h.sessionArea.data.has(`standdown:relay:tab:${TAB}`)).toBe(true);
+
+    h.chrome.tabs.onRemoved.emit(TAB);
+    await h.flush();
+
+    expect(h.sessionArea.data.has(`standdown:relay:tab:${TAB}`)).toBe(false);
+    await expect(h.query('https://shop.example/', 1_100)).resolves.toMatchObject({
+      standDown: false,
+    });
+  });
+
+  it('keeps no full URL and no param values in anything it stores or sends', async () => {
+    const h = harness();
+    const page = h.open(
+      'https://shop.example/secret-path?cjevent=VALUE123&email=person%40mail.example',
+      1_000,
+      'https://ref.example/from?token=REFVALUE',
+    );
+    await h.flush();
+
+    const expected = { v: 1, host: 'shop.example', at: 1_000, matches: [{ policyId: 'cj', params: ['cjevent'] }] };
+    expect(page.record).toEqual(expected);
+    expect(JSON.parse(page.window.storage.get(RELAY_SESSION_STORAGE_KEY) ?? 'null')).toEqual(expected);
+    expect(h.sent).toEqual([{ type: 'standdown:relay:capture', record: expected }]);
+    expect(h.sessionArea.data.get(`standdown:relay:tab:${TAB}`)).toEqual({
+      host: 'shop.example',
+      at: 1_000,
+      lastAt: 1_000,
+      matches: [{ policyId: 'cj', params: ['cjevent'] }],
+    });
+
+    const everything = JSON.stringify([
+      [...page.window.storage.entries()],
+      h.sent,
+      [...h.sessionArea.data.entries()],
+      [...h.localArea.data.entries()],
+    ]);
+    for (const leaked of ['VALUE123', 'secret-path', 'email', 'person', 'ref.example', 'REFVALUE']) {
+      expect(everything).not.toContain(leaked);
+    }
+  });
+
+  it('re-sends the stored record after a same-tab reload of the stripped URL', async () => {
+    const h = harness();
+    const first = h.open('https://shop.example/?cjevent=abc', 1_000);
+    first.window.location.href = 'https://shop.example/';
+    await h.flush();
+    // Background loses its record (e.g. browser restored the tab).
+    await h.relay.forgetTab(TAB);
+
+    h.open('https://shop.example/', 2_000, undefined, first.window.storage);
+    await h.flush();
+
+    await expect(h.query('https://shop.example/', 2_100)).resolves.toMatchObject({
+      standDown: true,
+      matchKind: 'landing',
+    });
+  });
+
+  it('retries the send once when the background is not listening yet', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const result = captureLanding({
+      policies: [cjPolicy],
+      window: fakeWindow('https://shop.example/?cjevent=abc').window,
+      now: () => 1_000,
+      retryDelayMs: 250,
+      sendMessage: () => {
+        calls += 1;
+        return calls === 1
+          ? Promise.reject(new Error('Receiving end does not exist.'))
+          : Promise.resolve();
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(result?.delivered).resolves.toBe(true);
+    expect(calls).toBe(2);
+  });
+
+  it('does nothing in sub-frames', () => {
+    const fake = fakeWindow('https://ads.example/?cjevent=abc');
+    const result = captureLanding({
+      policies: [cjPolicy],
+      window: { ...fake.window, top: {}, self: fake.window },
+      sendMessage: () => undefined,
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('rejects captures from sub-frames, without a tab, from another host, or malformed', async () => {
+    const h = harness();
+    const record = { v: 1, host: 'shop.example', at: 1_000, matches: [{ policyId: 'cj', params: ['cjevent'] }] };
+    const capture = { type: 'standdown:relay:capture', record };
+
+    const rejected: [unknown, RelaySenderLike][] = [
+      [capture, { tab: { id: TAB }, frameId: 3 }],
+      [capture, { frameId: 0 }],
+      [capture, { tab: { id: TAB }, frameId: 0, url: 'https://other.example/' }],
+      [{ ...capture, record: { ...record, url: 'https://shop.example/?cjevent=abc' } }, { tab: { id: TAB }, frameId: 0 }],
+      [{ ...capture, record: { ...record, matches: [{ policyId: 'cj', params: [] }] } }, { tab: { id: TAB }, frameId: 0 }],
+    ];
+
+    for (const [message, sender] of rejected) {
+      await expect(h.relay.handleMessage(message, sender)).resolves.toEqual({ ok: false });
+    }
+    expect(h.sessionArea.data.size).toBe(0);
+  });
+
+  it('answers shouldStandDown messages keyed by sender.tab.id', async () => {
+    const h = harness();
+    h.open('https://shop.example/?cjevent=abc', 1_000);
+    await h.flush();
+
+    const response = await h.chrome.runtime.onMessage.dispatch(
+      { type: 'standdown:relay:shouldStandDown', url: 'https://shop.example/' },
+      { tab: { id: TAB }, frameId: 0 },
+    );
+    expect(response).toMatchObject({ ok: true, decision: { standDown: true, matchKind: 'landing' } });
+
+    const otherTab = await h.chrome.runtime.onMessage.dispatch(
+      { type: 'standdown:relay:shouldStandDown', url: 'https://shop.example/' },
+      { tab: { id: TAB + 1 }, frameId: 0 },
+    );
+    expect(otherTab).toMatchObject({ ok: true, decision: { standDown: true } });
+    // Tab 8 is covered by the session stand-down the first query recorded for the
+    // host, not by a landing record of its own.
+    expect(otherTab?.decision?.matchKind).toBeUndefined();
+  });
+
+  it('fails closed on an unparseable URL', async () => {
+    const h = harness();
+    await expect(h.query('not a url', 1_000)).resolves.toMatchObject({ standDown: true });
+  });
+});
+
+describe('policy.detection.trackingHosts', () => {
+  it('validates as a DomainRule list', () => {
+    expect(() =>
+      validatePolicy({
+        ...cjPolicy,
+        detection: { ...cjPolicy.detection, trackingHosts: [{ pattern: 'go.example', kind: 'suffix' }] },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validatePolicy({
+        ...cjPolicy,
+        detection: { ...cjPolicy.detection, trackingHosts: [{ pattern: 'go.example', kind: 'glob' }] },
+      }),
+    ).toThrow(/DomainRule.kind/);
+  });
+});
+
+function harness(
+  opts: {
+    policies?: readonly StanddownPolicy[];
+    selfPatterns?: readonly SelfExemption[];
+    maxAgeMs?: number;
+  } = {},
+) {
+  const policies = opts.policies ?? [cjPolicy];
+  const chrome = fakeChrome();
+  const pending: Promise<unknown>[] = [];
+  const sent: RelayCaptureMessage[] = [];
+  const relay = createRelayStanddown({
+    policies,
+    chrome,
+    now: () => 0,
+    ...(opts.selfPatterns ? { selfPatterns: opts.selfPatterns } : {}),
+    ...(opts.maxAgeMs ? { maxAgeMs: opts.maxAgeMs } : {}),
+  });
+
+  return {
+    chrome,
+    relay,
+    sent,
+    sessionArea: chrome.storage.session,
+    localArea: chrome.storage.local,
+    open(url: string, at: number, referrer?: string, storage?: Map<string, string>) {
+      const fake = fakeWindow(url, referrer, storage);
+      const result = captureLanding({
+        policies,
+        window: fake.window,
+        now: () => at,
+        ...(opts.selfPatterns ? { selfPatterns: opts.selfPatterns } : {}),
+        ...(opts.maxAgeMs ? { maxAgeMs: opts.maxAgeMs } : {}),
+        sendMessage: (message) => {
+          sent.push(structuredClone(message));
+          const host = new URL(url).hostname;
+          const delivery = relay.ingestCapture(TAB, message.record, at).then(() => host);
+          pending.push(delivery);
+          return delivery;
+        },
+      });
+      return { window: fake.window, record: result?.record };
+    },
+    async flush() {
+      await Promise.all(pending);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    },
+    query(url: string, at: number) {
+      return relay.shouldStandDown(TAB, url, at);
+    },
+  };
+}
+
+function fakeWindow(url: string, referrer?: string, storage = new Map<string, string>()) {
+  const window: CaptureWindowLike & { location: { href: string }; storage: Map<string, string> } = {
+    location: { href: url },
+    document: { referrer: referrer ?? '' },
+    storage,
+    sessionStorage: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => {
+        storage.set(key, value);
+      },
+      removeItem: (key) => {
+        storage.delete(key);
+      },
+    },
+  };
+  return { window };
+}
+
+class MemoryArea implements ChromeStorageAreaLike {
+  readonly data = new Map<string, unknown>();
+
+  get(keys?: string | string[] | Record<string, unknown> | null) {
+    const wanted =
+      keys === null || keys === undefined
+        ? [...this.data.keys()]
+        : typeof keys === 'string'
+          ? [keys]
+          : Array.isArray(keys)
+            ? keys
+            : Object.keys(keys);
+    const out: Record<string, unknown> = {};
+    for (const key of wanted) {
+      if (this.data.has(key)) out[key] = structuredClone(this.data.get(key));
+    }
+    return Promise.resolve(out);
+  }
+
+  set(items: Record<string, unknown>) {
+    for (const [key, value] of Object.entries(items)) this.data.set(key, structuredClone(value));
+    return Promise.resolve();
+  }
+
+  remove(keys: string | string[]) {
+    for (const key of Array.isArray(keys) ? keys : [keys]) this.data.delete(key);
+    return Promise.resolve();
+  }
+}
+
+function fakeEvent<T extends (...args: never[]) => unknown>() {
+  const listeners = new Set<T>();
+  return {
+    listeners,
+    addListener: (listener: T) => {
+      listeners.add(listener);
+    },
+    removeListener: (listener: T) => {
+      listeners.delete(listener);
+    },
+  };
+}
+
+function fakeChrome() {
+  type MessageListener = Parameters<
+    NonNullable<NonNullable<RelayChromeLike['runtime']>['onMessage']>['addListener']
+  >[0];
+  const onMessage = fakeEvent<MessageListener>();
+  const onRemoved = fakeEvent<(tabId: number) => void>();
+
+  return {
+    runtime: {
+      onMessage: {
+        ...onMessage,
+        dispatch(message: unknown, sender: RelaySenderLike) {
+          return new Promise<RelayMessageResponse | undefined>((resolve) => {
+            for (const listener of onMessage.listeners) {
+              if (listener(message, sender, resolve) === true) return;
+            }
+            resolve(undefined);
+          });
+        },
+      },
+    },
+    storage: { local: new MemoryArea(), session: new MemoryArea() },
+    tabs: {
+      onRemoved: {
+        ...onRemoved,
+        emit(tabId: number) {
+          for (const listener of onRemoved.listeners) listener(tabId);
+        },
+      },
+    },
+  };
+}

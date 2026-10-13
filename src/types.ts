@@ -68,6 +68,15 @@ export interface StanddownPolicy {
      * where competing activation is never acceptable.
      */
     disableHosts?: readonly DomainRule[];
+    /**
+     * Hosts that forward to the advertiser by script after the page loads
+     * (an interstitial click or link host). Used only by `standdown/relay`: a
+     * landing param seen on one of these hosts carries over to the next host
+     * the same tab lands on within the relay's hop window. Hosts sharing the
+     * advertiser's base domain always carry over and need no entry here.
+     * Server-side redirect hops load no page and are not covered.
+     */
+    trackingHosts?: readonly DomainRule[];
   };
   standdown: {
     scope: 'advertiser';
@@ -177,6 +186,13 @@ export interface Decision {
    * stand-down. Not set on stand-down decisions (over-suppression is safe).
    */
   degraded?: boolean;
+  /**
+   * Set only by `standdown/relay` on a stand-down triggered by a landing param
+   * the relay captured at `document_start` that is no longer in the current
+   * URL (stripped by the page, or left behind on a same-site / tracking host
+   * that forwarded here). Absent when the param is still in the URL.
+   */
+  matchKind?: 'landing';
 }
 
 export interface UserGesture {
