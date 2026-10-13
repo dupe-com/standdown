@@ -446,6 +446,9 @@ const selfPatterns = [
   { name: 'my_click_id', value: '_mybrand_awin', match: 'equals', networkId: 'awin' },
   // Where the network's own landing param already identifies you, you can use
   // it instead (check a real landing URL from your own link first):
+  // CJ: PID is your publisher ID, but it reaches the landing page only where
+  // the merchant passes it through, so treat it as an extra, not the marker:
+  // { name: 'PID', value: 'YOUR_CJ_PID', match: 'equals', networkId: 'cj' },
   // Rakuten: ranSiteID starts with your encrypted publisher ID.
   { name: 'ranSiteID', value: 'YOUR_ENCRYPTED_ID-', match: 'contains', networkId: 'rakuten' },
   // eBay Partner Network: campid is your campaign ID.
