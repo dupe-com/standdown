@@ -385,10 +385,17 @@ and predictable:
 
 - `value` is a JavaScript regular expression source with no flags, anchored with
   both `^` and `$`, at most 256 characters.
-- Validation rejects a pattern that doesn't compile, isn't anchored, is too long,
-  uses a backreference, or repeats a group that itself repeats or alternates
-  (`(a+)+`, `(a|aa)+`), since those can take seconds on a short input. A policy
-  with a rejected pattern fails closed (stands down).
+- Only a fast subset is accepted: single characters (a literal, an escape such as
+  `\d` or `\.`, `.`, or a `[...]` class), each with an optional count. Fixed
+  counts like `{11}` can appear any number of times, but **at most one** count
+  may vary in length (`+`, `*`, `?`, `{2,}`, `{2,4}`). No groups and no `|`.
+  That covers ID shapes (`^[A-Za-z0-9]{11}-[A-Za-z0-9]{22}$`, `^brand_[0-9]{4}$`)
+  and keeps matching time in line with the value's length. Patterns with
+  stacked repeats (`a*a*a*`) or chains of choices (`(a|a)(a|a)…`) can take
+  seconds or longer on a short value, so they are rejected.
+- Validation rejects a pattern outside that subset, or one that doesn't compile,
+  isn't anchored or is too long. A policy with a rejected pattern fails closed
+  (stands down).
 - A value longer than 512 characters never matches.
 - `example` (optional, `'pattern'` only) is a made-up value the pattern must
   match. Validation checks it, and the conformance grader uses it to build a

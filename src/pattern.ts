@@ -2,10 +2,16 @@
  * Regular-expression value matching for `ParamMatcher` `match: 'pattern'`.
  *
  * Policies can arrive remotely (signed refresh bundles), so a pattern must be
- * cheap and predictable: validation rejects anything that does not compile, is
- * longer than {@link MAX_PATTERN_LENGTH}, or is not anchored with both `^` and
- * `$`. No flags are accepted. Each source compiles once; matching stays pure
- * and synchronous, and an invalid source simply never matches (for a
+ * cheap and predictable. Rather than blocking known-slow shapes, validation
+ * accepts only a small subset that can't backtrack much: a sequence of single
+ * characters (a literal, an escape, `.` or a `[...]` class), each with an
+ * optional count, where at most ONE count can vary in length (`+`, `*`, `?`,
+ * `{n,}`, `{n,m}`). Fixed counts (`{11}`) are unlimited. No groups and no `|`.
+ * With one variable stretch and no alternation, the engine has at most one
+ * split to try per position, so matching time grows with the value's length,
+ * not exponentially. Sources must also compile, be at most
+ * {@link MAX_PATTERN_LENGTH} characters, carry no flags, and be anchored with
+ * `^` and `$`. Each source compiles once; an invalid one never matches (for a
  * self-exemption that errs toward standing down).
  */
 
@@ -28,10 +34,10 @@ export function patternProblem(source: string): string | undefined {
     return 'must be anchored with both ^ and $';
   }
 
-  const risky = riskyShape(source);
+  const unsupported = unsupportedSyntax(source.slice(1, -1));
 
-  if (risky !== undefined) {
-    return risky;
+  if (unsupported !== undefined) {
+    return unsupported;
   }
 
   try {
@@ -62,111 +68,106 @@ export function compiledPattern(source: string): RegExp | undefined {
   return compiled ?? undefined;
 }
 
+// Characters with a special meaning outside a class. Escape them to match literally.
+const SPECIAL = new Set(['^', '$', '\\', '.', '|', '?', '*', '+', '(', ')', '[', ']', '{', '}']);
+// Escapes allowed: the shorthand classes, or an escaped non-alphanumeric character.
+const isSafeEscape = (c: string | undefined) =>
+  c !== undefined && (/[dDwWsS]/.test(c) || !/[A-Za-z0-9_]/.test(c));
+
 /**
- * Rejects the regex shapes behind catastrophic backtracking (ReDoS): a repeated
- * group that itself contains a repeat or an alternation at any depth
- * (`(a+)+`, `((a+))+`, `(a|aa)+`, `(\\d+){2,}`), and backreferences. A small
- * scanner, not a full parser: it skips escapes and character classes and tracks
- * groups, which is enough to be strict about the risky shapes. `undefined` = ok.
+ * Why `body` (the source between `^` and `$`) is outside the allowed subset, or
+ * `undefined` if it fits. See the module comment for the subset.
  */
-export function riskyShape(source: string): string | undefined {
-  const groups: boolean[] = [false]; // per open group: contains a repeat or `|`
-  let afterGroup = false; // the previous atom was a group that closed
-  let lastGroupRisky = false;
+export function unsupportedSyntax(body: string): string | undefined {
+  let variable = 0;
   let i = 0;
 
-  while (i < source.length) {
-    const c = source[i];
+  while (i < body.length) {
+    const c = body[i] as string;
 
+    // One atom: a single character.
     if (c === '\\') {
-      const next = source[i + 1] ?? '';
-      if (/[1-9]/.test(next) || (next === 'k' && source[i + 2] === '<')) {
-        return 'uses a backreference';
+      if (!isSafeEscape(body[i + 1])) {
+        return `uses an unsupported escape \\${body[i + 1] ?? ''}`;
       }
       i += 2;
-      afterGroup = false;
-      continue;
-    }
-
-    if (c === '[') {
-      // JavaScript semantics: `[]` and `[^]` are complete classes (a leading
-      // `]` closes, unlike PCRE), so the scan must not swallow what follows.
-      i += 1;
-      if (source[i] === '^') i += 1;
-      while (i < source.length && source[i] !== ']') i += source[i] === '\\' ? 2 : 1;
-      i += 1;
-      afterGroup = false;
-      continue;
-    }
-
-    if (c === '(') {
-      groups.push(false);
-      i += 1;
-      if (source[i] === '?') {
-        i += 1;
-        if (source[i] === '<' && source[i + 1] !== '=' && source[i + 1] !== '!') {
-          while (i < source.length && source[i] !== '>') i += 1;
-        }
-        i += 1;
+    } else if (c === '[') {
+      const end = classEnd(body, i);
+      if (end === undefined) {
+        return 'has an unsupported character class';
       }
-      afterGroup = false;
-      continue;
-    }
-
-    if (c === ')') {
-      lastGroupRisky = groups.pop() ?? false;
-      if (groups.length === 0) groups.push(false);
-      groups[groups.length - 1] ||= lastGroupRisky;
-      afterGroup = true;
+      i = end;
+    } else if (c === '(' || c === ')' || c === '|') {
+      return 'uses a group or |, which patterns do not support';
+    } else if (c === '.' || !SPECIAL.has(c)) {
       i += 1;
-      continue;
+    } else {
+      return `has an unexpected ${c}`;
     }
 
-    if (c === '|') {
-      groups[groups.length - 1] = true;
-      afterGroup = false;
-      i += 1;
-      continue;
+    // Its optional count.
+    const count = countAt(body, i);
+    if (count === undefined) {
+      return 'has an unsupported repeat count';
     }
-
-    const repeat = repeatLength(source, i);
-
-    if (repeat > 0) {
-      if (afterGroup && lastGroupRisky) {
-        return 'repeats a group that contains a repeat or alternation (catastrophic backtracking)';
+    if (count.variable) {
+      variable += 1;
+      if (variable > 1) {
+        return 'has more than one variable-length repeat (only one of +, *, ?, {n,m} is allowed)';
       }
-      groups[groups.length - 1] = true;
-      afterGroup = false;
-      i += repeat;
-      continue;
     }
-
-    afterGroup = false;
-    i += 1;
+    i += count.length;
   }
 
   return undefined;
 }
 
-// Length of a repeating quantifier at `i` (`+`, `*`, `{n,}`, `{n,m}` / `{n}` with
-// a max above 1), or 0. `?` and `{0,1}` can't repeat, so they don't count.
-function repeatLength(source: string, i: number): number {
-  const c = source[i];
+// End index (exclusive) of the class starting at `start`, or undefined if it's
+// empty, unclosed or holds an unsafe escape. `[^]` and a leading `]` are rejected
+// rather than guessed at.
+function classEnd(body: string, start: number): number | undefined {
+  let i = start + 1;
+  if (body[i] === '^') i += 1;
+  if (body[i] === ']') return undefined;
 
-  if (c === '+' || c === '*') {
-    return 1;
-  }
-
-  if (c === '{') {
-    const m = /^\{(\d+)(,(\d*))?\}/.exec(source.slice(i));
-    if (m) {
-      const min = Number(m[1]);
-      const max = m[2] === undefined ? min : m[3] === '' ? Infinity : Number(m[3]);
-      return max > 1 ? m[0].length : 0;
+  while (i < body.length && body[i] !== ']') {
+    if (body[i] === '\\') {
+      if (!isSafeEscape(body[i + 1])) return undefined;
+      i += 2;
+    } else {
+      i += 1;
     }
   }
 
-  return 0;
+  return i < body.length ? i + 1 : undefined;
+}
+
+// The count at `i`: its length and whether it varies. No count = length 0.
+// A trailing lazy `?` is not accepted (it's never needed to match an ID shape).
+function countAt(body: string, i: number): { length: number; variable: boolean } | undefined {
+  const c = body[i];
+  let length = 0;
+  let variable = false;
+
+  if (c === '+' || c === '*' || c === '?') {
+    length = 1;
+    variable = true;
+  } else if (c === '{') {
+    const m = /^\{(\d{1,3})(,(\d{0,3}))?\}/.exec(body.slice(i));
+    if (!m) return undefined;
+    const min = Number(m[1]);
+    const max = m[2] === undefined ? min : m[3] === '' ? Infinity : Number(m[3]);
+    if (max < min) return undefined;
+    length = m[0].length;
+    variable = max !== min;
+  }
+
+  const next = body[i + length];
+  if (length > 0 && (next === '+' || next === '*' || next === '?' || next === '{')) {
+    return undefined;
+  }
+
+  return { length, variable };
 }
 
 /** Test-only: how many sources are compiled (or known invalid) and cached. */

@@ -15,7 +15,7 @@ import {
   paramMatcherMatches,
   patternCacheSizeForTests,
 } from '../src/detect';
-import { compiledPattern } from '../src/pattern';
+import { compiledPattern, patternProblem } from '../src/pattern';
 import { cjPolicy } from '../src/policies';
 import { createRelayStanddown } from '../src/relay/background';
 import { captureLanding } from '../src/relay/capture';
@@ -112,40 +112,93 @@ describe("validatePolicy: 'pattern' safety", () => {
   });
 
   it.each([
+    // Nested or grouped repeats and alternation (catastrophic backtracking).
     ['^(a+)+$'],
     ['^(a*)*$'],
     ['^(\\w+)*x$'],
     ['^(a{1,})+$'],
     ['^(\\d+){2,}$'],
     ['^(a|aa)+$'],
-    ['^(a)\\1$'],
-    ['^((a+))+$'],
     ['^((ab)+)+$'],
     ['^(?:a+)+$'],
     ['^(?<x>a|b)*$'],
-    // JS reads `[]` / `[^]` as whole classes; the scan must not hide what follows.
     ['^[^](a+)+$'],
     ['^[](a+)+$'],
-  ])('rejects %s, which risks catastrophic backtracking (ReDoS)', (value) => {
+    // Repeats side by side, and chains of choices: slow without any nesting.
+    ['^a*a*$'],
+    ['^a*a*a*a*$'],
+    ['^\\w+\\w+$'],
+    ['^.*.*$'],
+    ['^a?a?a?a?a?$'],
+    ['^[a-z]+-[0-9]{2,4}$'],
+    [`^${'(a|a)'.repeat(22)}$`],
+    ['^a|b$'],
+    // Backreferences and other escapes outside the subset.
+    ['^(a)\\1$'],
+    ['^\\1a$'],
+    ['^\\k<x>a$'],
+    ['^\\ba$'],
+    ['^\\u0041$'],
+    // Lazy or stacked counts, and classes the subset doesn't guess at.
+    ['^a+?$'],
+    ['^a{2}{3}$'],
+    ['^a{3,2}$'],
+    ['^[]a]$'],
+    ['^[^]$'],
+    ['^[a\\1]$'],
+    ['^a]$'],
+  ])('rejects %s (outside the fast subset)', (value) => {
     expect(() => validatePolicy(sitePolicy(value))).toThrow(/pattern/i);
     // And it never matches at runtime either (e.g. as a selfPatterns entry).
     expect(paramMatcherMatches({ name: 'siteID', match: 'pattern', value }, landing(`siteID=${'a'.repeat(40)}!`))).toBe(false);
   });
 
-  it('still accepts simple groups and character classes', () => {
+  it('accepts single characters with fixed counts and at most one variable repeat', () => {
     for (const value of [
-      '^(ab)+$',
-      '^(?:ab)+$',
-      '^(?<id>ab)+$',
+      '^[a-z]+$',
+      '^.+$',
+      '^\\d{4}$',
+      '^[a-z]{2,4}-[0-9]{3}$',
       '^[(+]+$',
-      '^\\(a+\\)+$',
-      '^(a){2}$',
-      '^(ab)?$',
-      '^[a-z]+-[0-9]{2,4}$',
+      '^\\(a+\\)$',
+      '^[\\]]+$',
+      '^a{2}b{3}c?$',
+      '^brand_[0-9]{4}$',
+      '^[^-]+-x$',
       RAKUTEN_SITE_ID,
     ]) {
       expect(() => validatePolicy(sitePolicy(value)), value).not.toThrow();
     }
+  });
+
+  it('every accepted pattern stays fast on a long hostile value (exhaustive over short patterns)', () => {
+    const tokens = ['a', '\\d', '.', '[a-]', '[^b]', '-', '+', '*', '?', '{2}', '{1,3}', '(', '|', ']'];
+    const inputs = ['a'.repeat(511), `${'a'.repeat(510)}!`, `${'-a'.repeat(255)}!`, '1'.repeat(511)];
+    let accepted = 0;
+    let slowest = 0;
+    const walk = (body: string, depth: number) => {
+      const source = `^${body}$`;
+      if (body !== '' && patternProblem(source) === undefined) {
+        accepted += 1;
+        const re = new RegExp(source);
+        // Fastest of three runs: ignores one-off JIT warm-up, keeps real backtracking.
+        let best = Infinity;
+        for (let run = 0; run < 3; run += 1) {
+          const started = performance.now();
+          for (const input of inputs) re.test(input);
+          best = Math.min(best, performance.now() - started);
+        }
+        slowest = Math.max(slowest, best);
+      }
+      if (depth === 0) return;
+      for (const token of tokens) walk(body + token, depth - 1);
+    };
+    walk('', 4);
+    // Deeper, over the tokens that build stacked repeats (`a*a*a*`).
+    tokens.splice(0, tokens.length, 'a', '.', '*', '?', '+');
+    walk('', 6);
+    expect(accepted).toBeGreaterThan(1_000);
+    expect(slowest).toBeLessThan(10);
   });
 
   it('bounds the input: a value over 512 characters never matches a pattern', () => {

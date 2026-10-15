@@ -7,8 +7,10 @@ export type Behavior =
 /**
  * How a param's value is compared. `'pattern'`: `value` is a JavaScript
  * regular-expression SOURCE (no flags), anchored with `^` and `$`, at most 256
- * characters; it matches when any of the param's values satisfies it. Avoid
- * nested quantifiers like `(a+)+` (catastrophic backtracking).
+ * characters; it matches when any of the param's values satisfies it. Only a
+ * fast subset is accepted: single characters (literal, escape, `.`, `[...]`)
+ * with optional counts, at most one of them variable-length (`+`, `*`, `?`,
+ * `{n,m}`); fixed counts like `{11}` are unlimited; no groups and no `|`.
  */
 export type ParamMatchMode = 'exists' | 'equals' | 'contains' | 'pattern';
 
