@@ -89,9 +89,10 @@ export function riskyShape(source: string): string | undefined {
     }
 
     if (c === '[') {
+      // JavaScript semantics: `[]` and `[^]` are complete classes (a leading
+      // `]` closes, unlike PCRE), so the scan must not swallow what follows.
       i += 1;
       if (source[i] === '^') i += 1;
-      if (source[i] === ']') i += 1;
       while (i < source.length && source[i] !== ']') i += source[i] === '\\' ? 2 : 1;
       i += 1;
       afterGroup = false;

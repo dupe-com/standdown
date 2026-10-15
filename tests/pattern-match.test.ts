@@ -123,6 +123,9 @@ describe("validatePolicy: 'pattern' safety", () => {
     ['^((ab)+)+$'],
     ['^(?:a+)+$'],
     ['^(?<x>a|b)*$'],
+    // JS reads `[]` / `[^]` as whole classes; the scan must not hide what follows.
+    ['^[^](a+)+$'],
+    ['^[](a+)+$'],
   ])('rejects %s, which risks catastrophic backtracking (ReDoS)', (value) => {
     expect(() => validatePolicy(sitePolicy(value))).toThrow(/pattern/i);
     // And it never matches at runtime either (e.g. as a selfPatterns entry).
