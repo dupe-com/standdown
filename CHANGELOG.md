@@ -23,6 +23,10 @@ existing users will notice:
   still see your CJ click as before.)
 - Saved state gains an optional `sharedOnlyPolicyIds` field. 0.4.0 ignores it,
   so rolling back keeps working.
+- **Signed policy refresh:** serve these policies only to clients on 0.5.0 or
+  later. 0.4.0 doesn't know `match: 'pattern'`, so it rejects the new Rakuten
+  policy and stands down on every page (the safe direction, but it never
+  activates).
 
 ### Added
 
