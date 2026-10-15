@@ -8,6 +8,7 @@ import {
   type StateStore,
   validatePolicy,
 } from '../src';
+import { collectContentSignals } from '../src/content';
 import { allPolicies, cjPolicy, impactPolicy, universalPolicy } from '../src/policies';
 import { createRelayStanddown } from '../src/relay/background';
 import { captureLanding } from '../src/relay/capture';
@@ -107,6 +108,29 @@ describe('afsrc=1 is a shared signal', () => {
     const broken = JSON.parse(JSON.stringify(impactPolicy));
     broken.detection.landingParams[0].anyOf[0].allOf[0].shared = 'yes';
     expect(() => validatePolicy(broken)).toThrow(/shared/);
+  });
+});
+
+describe('content adapter with shared signals', () => {
+  const decide = (href: string) =>
+    new StanddownSession(new MemoryStateStore()).ingest(
+      {
+        ...collectContentSignals({
+          window: { location: { href }, document: { referrer: '', cookie: '' } },
+          now: () => 0,
+        }),
+        selfPatterns: ownCj,
+      },
+      allPolicies,
+    );
+
+  it('own click with afsrc=1 activates; afsrc=1 alone stands down, marked shared-only', async () => {
+    await expect(decide(ownClickUrl)).resolves.toMatchObject({ standDown: false, degraded: true });
+    await expect(decide(`${shop}/?afsrc=1`)).resolves.toMatchObject({
+      standDown: true,
+      matchedParams: ['afsrc'],
+      sharedOnly: true,
+    });
   });
 });
 

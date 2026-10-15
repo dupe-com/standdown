@@ -18,7 +18,9 @@ existing users will notice:
   browser restart, as Impact's stand-down policy asks.
 - **Your own click explains `afsrc=1` in the same URL.** A CJ link of yours that
   carries `afsrc=1` now activates as your own click, with the marker scoped to
-  `cj` alone. `afsrc=1` on its own still stands down everywhere it did.
+  `cj` alone. `afsrc=1` on its own still stands down everywhere it did. (With the
+  `webext` adapter's `webRequest` plane, `universal`'s CJ link and domain rules
+  still see your CJ click as before.)
 - Saved state gains an optional `sharedOnlyPolicyIds` field. 0.4.0 ignores it,
   so rolling back keeps working.
 

@@ -4,7 +4,7 @@ import {
   type SignedPolicyBundle,
   type StanddownPolicy,
 } from '../src';
-import { cjPolicy } from '../src/policies';
+import { cjPolicy, impactPolicy, universalPolicy } from '../src/policies';
 import type { ChromeStorageAreaLike } from '../src/stores';
 import {
   type ChromeLike,
@@ -51,6 +51,34 @@ describe('webext adapter: selfClickLift timing', () => {
     await expect(
       run({ transitionType: 'link', transitionQualifiers: ['forward_back'] }),
     ).resolves.toMatchObject({ standDown: true });
+  });
+});
+
+describe('webext adapter: shared afsrc=1', () => {
+  const run = async (landing: string) => {
+    const chrome = fakeChrome({ webRequest: true });
+    const controller = createStanddown({
+      policies: [cjPolicy, impactPolicy, universalPolicy],
+      chrome,
+      selfPatterns: [{ name: 'my_click_id', value: 'own', match: 'equals', networkId: 'cj' }],
+      now: () => 1_000,
+    });
+    chrome.webRequest?.onBeforeRequest?.emit({ tabId: 5, type: 'main_frame', frameId: 0, url: landing });
+    chrome.webNavigation?.onCommitted?.emit({ tabId: 5, frameId: 0, url: landing });
+    await flushPromises();
+    const decision = await controller.shouldStandDown(5, 1_001);
+    controller.dispose();
+    return decision;
+  };
+
+  it('the own click explains afsrc=1 in the landing URL and redirect chain', async () => {
+    await expect(run('https://merchant.example/?my_click_id=own&afsrc=1')).resolves.toMatchObject({
+      standDown: false,
+    });
+  });
+
+  it('afsrc=1 alone still stands down', async () => {
+    await expect(run('https://merchant.example/?afsrc=1')).resolves.toMatchObject({ standDown: true });
   });
 });
 
