@@ -161,8 +161,14 @@ createStanddown({
 Only monotone updates are applied: detection coverage may broaden, durations may
 lengthen, and activation rules must remain unchanged. Added overlapping policies
 cannot downgrade a decision because the session layer unions behaviors from every
-policy matching the advertiser. Signed bundles also reject overly complex regex
-`DomainRule` patterns before they can enter local detection.
+policy matching the advertiser. Every `DomainRule` field counts as coverage, so a
+bundle can't drop `disableHosts` or `trackingHosts` either.
+
+Regex `DomainRule`s in a signed bundle (in any of the four fields) may only
+reuse patterns the client already runs, which shipped with it. A regex's cost
+can't be bounded reliably from its source, so a bundle adds new domains as
+`suffix` rules (`example.com` matches it and its subdomains), which are always
+cheap. A new regex rule needs a library release.
 
 ## Content adapter
 

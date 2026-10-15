@@ -24,6 +24,11 @@ existing users will notice:
 - Saved state gains optional fields (`sharedOnlyPolicyIds`, `sharedReferral`,
   and `sharedAlone` on relay tab records). 0.4.0 ignores them, so rolling back
   keeps working.
+- **Signed policy refresh is stricter.** A bundle can't remove `disableHosts` or
+  `trackingHosts`, and its regex domain rules (in any of the four fields) may only
+  reuse patterns the client already ships. New domains go in as `suffix` rules.
+  A bundle that breaks either rule is refused, and the current policies stay in
+  use.
 - **Signed policy refresh:** serve these policies only to clients on 0.5.0 or
   later. 0.4.0 doesn't know `match: 'pattern'`, so it rejects the new Rakuten
   policy and stands down on every page (the safe direction, but it never
@@ -64,6 +69,10 @@ existing users will notice:
   shop strips your own click's param.** Before, your own click in the current
   URL could hide a competitor's param relayed from an earlier landing in the same
   tab, until the shop removed your param.
+- **Signed bundles can't slow down decisions with a new regex.** The old check
+  only caught some slow regex shapes, and skipped `disableHosts` and
+  `trackingHosts`. Bundles now reuse shipped regex patterns only.
+- **Signed bundles can't remove `disableHosts` or `trackingHosts`.**
 - **Relay: param names a page writes into the capture's `sessionStorage` copy
   can't crowd out a real referral.** The background keeps only names the policy
   reads, and keeps stored records within their size limits. Before, 16 made-up

@@ -15,9 +15,9 @@ These encode the Affiliate Software Code of Conduct (affiliatecoc.org/code) and 
 - **I1 — Client-side decisions only.** No network call may participate in a stand-down decision. The decision path is a pure function over local signals + bundled policies.
 - **I2 — No user profiling.** The decision function's inputs must never include user identity, account age, points balances, email, login state, or anything usable to detect compliance testers. The type signatures should make this structurally impossible (closed `Signals` type, no arbitrary context bag).
 - **I3 — Fail toward standing down.** Unknown/ambiguous states resolve to `standDown: true` for suppression purposes (loading, storage errors, malformed policy). Activation guard fails closed.
-- **I4 — Monotone remote updates.** The optional policy-refresh mechanism must reject any bundle that removes/narrows detection coverage, shortens durations, or touches activation rules. Updates can only broaden stand-down.
+- **I4 — Monotone remote updates.** The optional policy-refresh mechanism must reject any bundle that removes/narrows detection coverage (including `disableHosts` and `trackingHosts`), shortens durations, or touches activation rules. Updates can only broaden stand-down.
 - **I5 — Audit log on by default.** Every decision (both outcomes) is appendable to a local, exportable audit log so a publisher can prove compliance in an Edelman-style third-party audit.
-- **I6 — No remote code, no eval, no dynamic script loading.** Policies are data (validated, no regex compilation from remote sources without the monotonicity + signature checks).
+- **I6 — No remote code, no eval, no dynamic script loading.** Policies are data (validated, no regex compilation from remote sources without the monotonicity + signature checks). A signed bundle may only carry regex domain rules whose pattern the client already runs (shipped with it); new domains arrive as suffix rules.
 - **I7 — Deterministic + loggable.** `decide()` is pure: same signals + policies + clock → same decision, with machine-readable reasons.
 
 ## Package
