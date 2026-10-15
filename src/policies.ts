@@ -136,7 +136,7 @@ export const impactPolicy = {
 export const rakutenPolicy = {
   id: 'rakuten',
   schemaVersion: 3,
-  policyVersion: '0.1.0',
+  policyVersion: '0.2.0',
   network: {
     id: 'rakuten',
     name: 'Rakuten Advertising',
@@ -156,7 +156,20 @@ export const rakutenPolicy = {
           // Matches the Rakuten PublisherStandown-SDK's own detection.
           { allOf: [{ name: 'ranEAID' }] },
           { allOf: [{ name: 'ranSiteID' }] },
-          { allOf: [{ name: 'siteID' }] },
+          // Some advertisers pass the publisher's site ID as a plain siteID. It
+          // counts only with Rakuten's shape (11 chars, a hyphen, 22 chars): a
+          // bare siteID is common on unrelated sites (country codes, campaign
+          // codes, other networks' IDs).
+          {
+            allOf: [
+              {
+                name: 'siteID',
+                match: 'pattern',
+                value: '^[A-Za-z0-9/*_.]{11}-[A-Za-z0-9/*_.]{22}$',
+                example: 'ABCDEFGHIJK-abcdefghijklmnopqrstuv',
+              },
+            ],
+          },
         ],
       },
     ],
@@ -186,7 +199,7 @@ export const rakutenPolicy = {
     sourceUrl: 'https://github.com/rakutenrewards/PublisherStandown-SDK',
     lastVerified: LAST_VERIFIED,
     notes:
-      'Rakuten SDK is detection-only and ships no policies; duration uses CoC fallback because the public source describes browser-session semantics without a fixed millisecond value.',
+      'Rakuten SDK is detection-only and ships no policies; duration uses CoC fallback because the public source describes browser-session semantics without a fixed millisecond value. A plain siteID counts only with Rakuten\'s site-ID shape (11 characters, a hyphen, 22 characters): neither the Rakuten SDK nor its network policy names a bare siteID, and the name is common on unrelated sites.',
   },
 } as const satisfies StanddownPolicy;
 
