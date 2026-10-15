@@ -1,5 +1,54 @@
 # Changelog
 
+## Unreleased
+
+A new `'pattern'` param match, sharper Rakuten and Impact policies, and clearer
+handling of the shared `afsrc=1` signal.
+
+### Upgrading from 0.4.x
+
+No exports were removed, and code written for 0.4.0 still type-checks. What
+existing users will notice:
+
+- **Rakuten counts a plain `siteID` only in Rakuten's site-ID shape** (11
+  characters, a hyphen, 22 characters), so it stands down on real Rakuten site
+  IDs and leaves the unrelated `siteID` params many sites use alone. `ranMID`,
+  `ranEAID` and `ranSiteID` work as before.
+- **An Impact stand-down lasts at least 30 minutes**, so it survives a quick
+  browser restart, as Impact's stand-down policy asks.
+- **Your own click explains `afsrc=1` in the same URL.** A CJ link of yours that
+  carries `afsrc=1` now activates as your own click, with the marker scoped to
+  `cj` alone. `afsrc=1` on its own still stands down everywhere it did.
+- Saved state gains an optional `sharedOnlyPolicyIds` field. 0.4.0 ignores it,
+  so rolling back keeps working.
+
+### Added
+
+- **`match: 'pattern'`** on `ParamMatcher`: `value` is an anchored regular
+  expression (`^…$`, no flags, at most 256 characters), checked against each
+  value of the param. Validation rejects patterns that don't compile, aren't
+  anchored, are too long, or have shapes known to be slow (`(a+)+`,
+  backreferences), and a policy with one fails closed. Values over 512
+  characters never match. Works in detection, the content, webext and relay
+  adapters, and `selfPatterns`. An optional `example` documents a matching value
+  and is checked by validation and used by the conformance grader.
+- **`shared: true`** on `ParamMatcher` and `DomainRule`, for a signal several
+  networks append. The bundled `cj`, `impact` and `universal` policies mark
+  `afsrc=1` this way.
+- **`Decision.matchedParams`** and **`Decision.sharedOnly`**: a fresh stand-down
+  names the landing params that triggered it (names only, never values), and
+  says when it rests only on a shared signal.
+
+### Changed
+
+- **`rakutenPolicy` 0.2.0**: plain `siteID` uses `match: 'pattern'` with
+  Rakuten's site-ID shape.
+- **`impactPolicy` 0.2.0**: `minDurationMs` is 30 minutes, citing Impact's
+  stand-down announcement.
+- **`cjPolicy` 0.3.0 and `universalPolicy` 0.2.0**: `afsrc=1` is marked shared.
+- **`selfClickLift`** can lift a competitor's same-network click that also
+  carried `afsrc=1`. A stand-down that rests only on `afsrc=1` is never lifted.
+
 ## 0.4.0 - 2026-10-13
 
 New opt-in `standdown/relay` entry point and `selfClickLift`, plus a few default

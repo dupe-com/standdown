@@ -64,9 +64,15 @@ interface StanddownPolicy {
 
 // ParamRule supports AND-groups OR'd together:
 //   { anyOf: [ { allOf: [{name:'ranEAID'},{name:'ranSiteID'}] }, { allOf: [{name:'ranSiteID'}] } ] }
-// Individual matchers: { name: string; value?: string; match?: 'exists'|'equals'|'contains' }
+// Individual matchers: { name: string; value?: string; match?: 'exists'|'equals'|'contains'|'pattern';
+//   example?: string; shared?: boolean }
+//   'pattern': value is a regex source, no flags, anchored ^...$, <= 256 chars, no backreferences
+//   or repeated groups that repeat/alternate; values over 512 chars never match. `example`
+//   ('pattern' only) must match. `shared`: a signal several networks append (afsrc=1). It still
+//   stands down, but a scoped own click in the same URL explains it, and selfClickLift never
+//   counts it as a network's own evidence (see the lift rules below).
 // CookieRule: { name: string; match: 'exact'|'substring' }
-// DomainRule: { pattern: string; kind: 'suffix'|'regex'; comment?: string }  // suffix match must be
+// DomainRule: { pattern: string; kind: 'suffix'|'regex'; comment?: string; shared?: boolean }  // suffix match must be
 //   proper domain-suffix (dot-boundary), NOT substring.
 ```
 
@@ -185,18 +191,21 @@ current navigation deletes the session record it is filed under (the
   `now`;
 - the own click's scoped patterns name exactly one network (the catch-all
   `universal` network aside). A click matching patterns for two networks, such as
-  a marker shared across networks or one scoped to every policy reading the
-  shared `afsrc=1`, only exempts;
-- every policy that fed the record (`SessionRecord.policyIds`) is the own
-  click's policy or on its network (a record written before `policyIds` existed
-  is never lifted);
+  a marker shared across networks, only exempts;
+- every policy that fed the record (`SessionRecord.policyIds`) through a
+  network-specific signal is the own click's policy or on its network (a record
+  written before `policyIds` existed is never lifted). Policies that only ever
+  matched through shared signals (`SessionRecord.sharedOnlyPolicyIds`, e.g.
+  `afsrc=1`) need no covering, but at least one network-specific contributor
+  must exist: a record fed only by shared signals is never lifted;
 - the record's latest referral (`max(startedAt, lastActivityAt)`) is strictly
   older than the own click;
 - nothing else matched this navigation (a competing param, cookie or redirect
   blocks it);
 - no `disableHosts` match ever fed the record (`SessionRecord.disabledHost`,
   sticky across a `sessionKey` bucket) or covers the current host, and the
-  `universal` catch-all didn't feed it (its `afsrc=1` names no network).
+  `universal` catch-all didn't feed it through a non-shared rule (a redirect
+  domain names no network).
 
 The latest referral is `SessionRecord.lastReferralAt` (falling back to
 `max(startedAt, lastActivityAt)`), which `recordActivity` never moves.
@@ -229,16 +238,16 @@ Every pack entry carries `metadata.sourceUrl` + `lastVerified: '2026-07-10'`. Se
 
 | Pack | Landing params | Redirect domains | Cookies | Stand-down | Activation |
 |---|---|---|---|---|---|
-| `cj` | `cjevent`; corroborating: `cjdata`, `utm_source=cj`, `sf_cs=cj`; `afsrc=1` | dpbolvw.net, anrdoezrs.net, jdoqocy.com, kqzyfj.com, tkqlhce.com, qksrv.net, awltovhc.com, lduhtrp.net (+ full ~21 from Pie list) | — (none; see POLICIES.md) | session-or-min 60m | user-click |
-| `impact` | `afsrc=1` (canonical), `irclickid` | (per-merchant) | `im_ref` (substring) | session-only | user-click |
-| `rakuten` | `ranMID`+`ranEAID`+`ranSiteID` OR-groups `siteID` | click.linksynergy.com, linksynergy.* | `lsclick_mid*`, `*linkshare*` (substring) | session-only | user-click |
+| `cj` | `cjevent`; corroborating: `cjdata`, `utm_source=cj`, `sf_cs=cj`; `afsrc=1` (shared) | dpbolvw.net, anrdoezrs.net, jdoqocy.com, kqzyfj.com, tkqlhce.com, qksrv.net, awltovhc.com, lduhtrp.net (+ full ~21 from Pie list) | — (none; see POLICIES.md) | session-or-min 60m | user-click |
+| `impact` | `afsrc=1` (canonical, shared), `irclickid` | (per-merchant) | `im_ref` (substring) | session-or-min 30m | user-click |
+| `rakuten` | `ranMID`+`ranEAID`+`ranSiteID` OR-groups; `siteID` only in Rakuten's site-ID shape (`pattern`) | click.linksynergy.com, linksynergy.* | `lsclick_mid*`, `*linkshare*` (substring) | session-only | user-click |
 | `awin` | `awc`; corroborating `utm_source=aw`, `source=aw` | awin1.com | — | session-or-min | user-click |
 | `shareasale` | `sscid` | shareasale.com | `sscid` (substring) | session-or-min | user-click |
 | `ebay-epn` | `campid`, `pubid`, `mkevt`, `mkcid`, `mkrid`; groups: [campid+_trkparms], [mktype+gclid] | rover.ebay.com | — | re-stand-down on any new non-approved source in-session | user-click, allowedReferrerClasses own-site/organic/direct |
 | `amazon` | `tag` (detect only) | — | — | n/a | **never** (Operating Agreement bans extensions carrying Special Links) |
 | `sovrn-skimlinks` | — | go.skimresources.com, go.redirectingat.com | — | session-or-min | user-click (generic conduct rules; no published signal) |
 | `partnerize` | `clickref` | prf.hn | — | session-or-min | user-click |
-| `universal` | `afsrc=1` (cross-network standard) + YouTube redirect rule from Pie | import/attribute piedotorg/standdown-domains (MIT) | — | CoC defaults: inactivity 60m, fallback min 90m | user-click |
+| `universal` | `afsrc=1` (cross-network standard, shared) + YouTube redirect rule from Pie | import/attribute piedotorg/standdown-domains (MIT) | — | CoC defaults: inactivity 60m, fallback min 90m | user-click |
 
 Also export `cocDefaults` (the Code of Conduct duration semantics) applied when a pack lacks explicit durations. A `POLICIES.md` in the repo documents every rule with its citation (research.md has the URLs).
 

@@ -100,6 +100,17 @@ page. Gating on `standDown` alone is still fully fail-closed: the library return
 `standDown: true` for every error, malformed-policy, and unknown state regardless
 of coverage. Stand-down decisions are never `degraded`.
 
+A stand-down that this navigation's own params triggered also says which params
+matched, by name only, never by value:
+
+- `matchedParams`: the landing param names, as the policy spells them, for
+  example `['cjevent', 'afsrc']`.
+- `sharedOnly: true`: every signal behind it is a shared one (`afsrc=1`), which
+  several networks append. The stand-down is just as binding, but `policyId` may
+  not name the network that actually referred the shopper.
+
+Both are absent when the decision comes from an earlier referral on the host.
+
 ## Webext adapter
 
 ```ts
@@ -356,6 +367,40 @@ const guard = guardActivation({
 });
 ```
 
+## Param matchers
+
+Policies, and your own `selfPatterns`, match a URL param with a `ParamMatcher`.
+Param names match in any casing in policies (own-click names stay exact); values
+compare exactly.
+
+| `match` | Matches when | Example |
+| --- | --- | --- |
+| `'exists'` (default without `value`) | the param is present | `{ name: 'cjevent' }` |
+| `'equals'` (default with `value`) | a value equals `value` | `{ name: 'afsrc', value: '1', match: 'equals' }` |
+| `'contains'` | a value contains `value` | `{ name: 'ranSiteID', value: 'ABC-', match: 'contains' }` |
+| `'pattern'` | a value fits the regular expression in `value` | `{ name: 'siteID', match: 'pattern', value: '^[A-Za-z0-9]{4}-[0-9]{2}$', example: 'AbC1-42' }` |
+
+`'pattern'` rules, so a policy (including one from a signed refresh) stays fast
+and predictable:
+
+- `value` is a JavaScript regular expression source with no flags, anchored with
+  both `^` and `$`, at most 256 characters.
+- Validation rejects a pattern that doesn't compile, isn't anchored, is too long,
+  uses a backreference, or repeats a group that itself repeats or alternates
+  (`(a+)+`, `(a|aa)+`), since those can take seconds on a short input. A policy
+  with a rejected pattern fails closed (stands down).
+- A value longer than 512 characters never matches.
+- `example` (optional, `'pattern'` only) is a made-up value the pattern must
+  match. Validation checks it, and the conformance grader uses it to build a
+  matching landing. Never put a real ID there.
+
+`shared: true` marks a signal several networks append, like `afsrc=1` (also on a
+`redirectDomains` rule). It still stands down on its own. When the same URL
+carries your own scoped click, a param group made only of shared matchers is
+explained by your click and doesn't match, and `selfClickLift` never counts
+shared-only evidence as a network's own. The bundled `cj`, `impact` and
+`universal` policies mark `afsrc=1` this way.
+
 ## Self-exemption scope
 
 `selfPatterns` declare the params that are *your own* attribution — when one
@@ -409,6 +454,8 @@ It only lifts when it is safe:
 - **Only an older referral.** A competitor click *after* yours (in any tab) keeps
   the stand-down.
 - **Never a mixed one.** If several networks fed the stand-down, it stays.
+  `afsrc=1` alone doesn't count as a network here: a competitor's CJ click that
+  carried it can be lifted, and a stand-down from `afsrc=1` alone never is.
 - **Never with a competing signal** on the same page, and never on a
   `disableHosts` host.
 
@@ -481,10 +528,11 @@ differ on a competitor's click. Then:
   CJ and Awin), the library can't tell whose credit it moved: it still exempts
   you, but never lifts. (The `universal` catch-all doesn't count as a network.)
 - **`afsrc=1` links.** CJ, Impact and the `universal` policy all read `afsrc=1`,
-  which says "some affiliate", not which one. If your links carry it, also scope
-  that link's marker to `impact` and `universal` (for a CJ link) so your own click
-  isn't stood down. Such a click names two networks, so it only exempts: the lift
-  doesn't apply to links carrying `afsrc=1`.
+  which says "some affiliate", not which one. When your own scoped click is in
+  the same URL, `afsrc=1` is explained by it, so scope the marker to its one
+  network only (`cj` for a CJ link). Scoping it to more networks makes the click
+  name two networks, so it would only exempt, never lift. A stand-down that rests
+  only on `afsrc=1` is never lifted.
 - **Scope every pattern** with `networkId` (or `policyId`). An unscoped pattern
   never exempts or lifts anything (see below).
 - **Prefer `equals` or a distinctive `contains` value.** A loose `contains` (e.g.

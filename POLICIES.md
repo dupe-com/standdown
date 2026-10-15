@@ -26,6 +26,12 @@ suppression behaviors (`suppress-prompts`, `no-cookie-write`, `no-redirect`,
 | `partnerize` | `clickref`, `prf.hn` | CoC defaults | User click | https://partnerize.com/legal/terms-and-conditions/ |
 | `universal` | Full piedotorg/standdown-domains regex rule list, plus `afsrc=1` final-URL detection | CoC defaults | User click | https://github.com/piedotorg/standdown-domains and https://raw.githubusercontent.com/piedotorg/standdown-domains/main/standdown-domains.json |
 
+`afsrc=1` is marked `shared` in `cj`, `impact` and `universal`: several networks
+append it, so it doesn't say which one referred the shopper. It stands down on
+its own as before. When the same URL carries the host's own scoped click, the
+own click explains it, and `selfClickLift` never treats it as a network's own
+evidence.
+
 Low-confidence entries remain bundled but are explicitly marked in
 `metadata.notes`: `sovrn-skimlinks` redirect domains and `partnerize` `prf.hn`
 were taken from research/domain knowledge rather than verified network policy
