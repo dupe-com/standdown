@@ -1,4 +1,4 @@
-import { compiledPattern, MAX_PATTERN_INPUT } from './pattern';
+import { compiledPattern, MAX_PATTERN_INPUT, MAX_PATTERN_VALUES } from './pattern';
 import type {
   CookieRule,
   Detection,
@@ -351,7 +351,7 @@ export function paramRuleMatch(
   for (const group of rule.anyOf) {
     const shared = isSharedGroup(group);
 
-    if ((ownClick && shared) || !group.allOf.every((matcher) => paramMatcherMatches(matcher, params))) {
+    if ((ownClick && shared) || !group.allOf.every((matcher) => paramMatcherMatches(matcher, params, true))) {
       continue;
     }
 
@@ -362,9 +362,16 @@ export function paramRuleMatch(
   return names.size > 0 ? { params: [...names], sharedOnly } : undefined;
 }
 
+/**
+ * Whether `matcher` matches `params`. `tooManyValues` is the answer when a
+ * `'pattern'` matcher meets more than {@link MAX_PATTERN_VALUES} values of its
+ * param: `true` for detection (stand down), `false` (the default) for
+ * self-exemptions, so neither direction fails open.
+ */
 export function paramMatcherMatches(
   matcher: ParamMatcher,
   params: ParamValues,
+  tooManyValues = false,
 ): boolean {
   const values = params(matcher.name);
   const mode = matcher.match ?? (matcher.value === undefined ? 'exists' : 'equals');
@@ -386,10 +393,13 @@ export function paramMatcherMatches(
   if (mode === 'pattern') {
     // Compiled once per source; an invalid source never matches.
     const pattern = compiledPattern(expectedValue);
-    return (
-      pattern !== undefined &&
-      values.some((value) => value.length <= MAX_PATTERN_INPUT && pattern.test(value))
-    );
+    if (pattern === undefined) {
+      return false;
+    }
+    if (values.length > MAX_PATTERN_VALUES) {
+      return tooManyValues;
+    }
+    return values.some((value) => value.length <= MAX_PATTERN_INPUT && pattern.test(value));
   }
 
   return values.some((value) => value.includes(expectedValue));

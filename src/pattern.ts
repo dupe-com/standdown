@@ -8,8 +8,9 @@
  * optional count, where at most ONE count can vary in length (`+`, `*`, `?`,
  * `{n,}`, `{n,m}`). Fixed counts (`{11}`) are unlimited. No groups and no `|`.
  * With one variable stretch and no alternation, the engine has at most one
- * split to try per position, so matching time grows with the value's length,
- * not exponentially. Sources must also compile, be at most
+ * split to try per position, so matching one value takes at most about the
+ * square of its length (capped at {@link MAX_PATTERN_INPUT}), never
+ * exponential time; at most {@link MAX_PATTERN_VALUES} values are tried. Sources must also compile, be at most
  * {@link MAX_PATTERN_LENGTH} characters, carry no flags, and be anchored with
  * `^` and `$`. Each source compiles once. Validation rejects an invalid one, so
  * sessions and adapters stand down; at match time it simply never matches (for
@@ -20,6 +21,13 @@ export const MAX_PATTERN_LENGTH = 256;
 
 /** Longest param value a pattern is tried against; longer values never match. */
 export const MAX_PATTERN_INPUT = 512;
+
+/**
+ * Most values of one param name a pattern is tried against. A URL can repeat a
+ * param thousands of times; past this, the caller decides without testing them
+ * (detection stands down, a self-exemption doesn't apply).
+ */
+export const MAX_PATTERN_VALUES = 16;
 
 // Bounds memory if a remote bundle or host config ships many distinct patterns.
 const MAX_CACHED_PATTERNS = 500;

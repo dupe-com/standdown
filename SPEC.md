@@ -69,7 +69,7 @@ interface StanddownPolicy {
 //   'pattern': value is a regex source, no flags, anchored ^...$, <= 256 chars, in a fast subset:
 //   single characters (literal, escape, '.', [class]) with optional counts, at most ONE of them
 //   variable-length (+ * ? {n,m}); fixed {n} unlimited; no groups, no '|'. Values over 512 chars
-//   never match. `example`
+//   never match; past 16 values of one param, detection stands down and selfPatterns don't apply. `example`
 //   ('pattern' only) must match. `shared`: a signal several networks append (afsrc=1). It still
 //   stands down, but a scoped own click in the same URL explains it, and selfClickLift never
 //   counts it as a network's own evidence (see the lift rules below).

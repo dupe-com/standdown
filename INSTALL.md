@@ -397,7 +397,9 @@ and predictable:
   isn't anchored or is too long. Sessions and every adapter validate policies
   first, so a policy with a rejected pattern stands down. (Calling `detect()`
   directly skips validation: there a rejected pattern simply never matches.)
-- A value longer than 512 characters never matches.
+- A value longer than 512 characters never matches. At most 16 values of one
+  param are tested: a URL that repeats it more often stands down, and an
+  own-click pattern doesn't apply to it.
 - `example` (optional, `'pattern'` only) is a made-up value the pattern must
   match, at most 512 characters. Validation checks it, and the conformance grader
   uses it to build a matching landing. Never put a real ID there.

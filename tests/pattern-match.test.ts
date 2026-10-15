@@ -223,6 +223,35 @@ describe("validatePolicy: 'pattern' safety", () => {
     expect(Date.now() - started).toBeLessThan(50);
   });
 
+  it('a URL repeating the param more than 16 times stands down without testing every value', async () => {
+    // Slowest shape the subset allows: one variable stretch, a long fixed tail.
+    const slowest = `^.*a${'.{99}'.repeat(40)}$`;
+    expect(patternProblem(slowest)).toBeUndefined();
+    const flood = `?${Array.from({ length: 3_000 }, () => `siteID=${'b'.repeat(512)}`).join('&')}`;
+    const started = performance.now();
+    await expect(
+      new StanddownSession(new MemoryStateStore()).ingest(
+        { url: `https://shop.example/${flood}`, now: 0 },
+        [sitePolicy(slowest)],
+      ),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'pattern-test' });
+    expect(performance.now() - started).toBeLessThan(500);
+    // Up to 16 values are each tested as usual.
+    expect(paramMatcherMatches(matcher, landing(`${'siteID=4&'.repeat(15)}siteID=${RAKUTEN_SHAPED}`), true)).toBe(true);
+    expect(paramMatcherMatches(matcher, landing('siteID=4&'.repeat(16)), true)).toBe(false);
+  });
+
+  it('a self-exemption never applies past 16 values of its param', () => {
+    const own: SelfExemption = { name: 'my_click_id', match: 'pattern', value: '^brand_[0-9]{4}$', networkId: 'pattern-net' };
+    const many = `${'my_click_id=x&'.repeat(16)}my_click_id=brand_1234`;
+    expect(paramMatcherMatches(own, exactParams(new URLSearchParams(many)))).toBe(false);
+    expect(
+      detect({ url: `https://shop.example/?siteID=${RAKUTEN_SHAPED}&${many}`, now: 0, selfPatterns: [own] }, [
+        sitePolicy(RAKUTEN_SITE_ID),
+      ]).strongest?.policyId,
+    ).toBe('pattern-test');
+  });
+
   it('no lint noise for a valid pattern', () => {
     expect(lintPolicies([sitePolicy(RAKUTEN_SITE_ID)])).toEqual([]);
   });

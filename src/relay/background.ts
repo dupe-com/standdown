@@ -26,6 +26,8 @@ import {
   isLandingRecord,
   type LandingMatch,
   type LandingRecord,
+  MAX_MATCHES,
+  MAX_PARAMS,
   RELAY_CAPTURE_MESSAGE,
   RELAY_SHOULD_STAND_DOWN_MESSAGE,
   type RelayShouldStandDownMessage,
@@ -189,6 +191,16 @@ export function createRelayStanddown(
   const store = opts.store ?? defaultStore(chromeApi, now);
   const session = new StanddownSession(store, pickSessionOptions(opts));
   const policyById = new Map(opts.policies.map((policy) => [policy.id, policy]));
+  const policyNames = new Map(
+    opts.policies.map((policy) => [
+      policy.id,
+      new Set(
+        (policy.detection.landingParams ?? []).flatMap((rule) =>
+          rule.anyOf.flatMap((group) => group.allOf.map((matcher) => matcher.name)),
+        ),
+      ),
+    ]),
+  );
   // Replay can't reconstruct a value that fits a `pattern` (capture keeps names
   // only), so the replay runs against a copy where each such group also accepts
   // the replay placeholder. The original group stays, for values still in the URL.
@@ -332,7 +344,7 @@ export function createRelayStanddown(
         ),
         ...newerSelf,
       ]),
-    ];
+    ].slice(0, MAX_MATCHES);
     const selfAt = newerSelf.length > 0 ? newerAt : older.selfAt;
 
     return {
@@ -351,7 +363,13 @@ export function createRelayStanddown(
       return;
     }
 
-    const known = record.matches.filter((match) => policyById.has(match.policyId));
+    // Only names the policy actually reads: a page can write junk names into the
+    // capture's sessionStorage mirror, and they must not crowd out real ones.
+    const known = record.matches.flatMap((match) => {
+      const names = policyNames.get(match.policyId);
+      const params = names ? match.params.filter((name) => names.has(name)) : [];
+      return params.length > 0 ? [{ policyId: match.policyId, params }] : [];
+    });
     const knownSelf = liftOn ? (record.self ?? []).filter((id) => policyById.has(id)) : [];
 
     await serialize(async () => {
@@ -731,7 +749,11 @@ function mergeMatches(
     merged.set(match.policyId, names);
   }
 
-  return [...merged].map(([policyId, names]) => ({ policyId, params: [...names] }));
+  // Stay within what a stored record may hold, or `load` would reject the whole
+  // record and forget the referral. Earlier (already recorded) entries win.
+  return [...merged]
+    .slice(0, MAX_MATCHES)
+    .map(([policyId, names]) => ({ policyId, params: [...names].slice(0, MAX_PARAMS) }));
 }
 
 function isTabLanding(value: unknown): value is TabLanding {

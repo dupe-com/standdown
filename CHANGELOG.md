@@ -64,6 +64,10 @@ existing users will notice:
   shop strips your own click's param.** Before, your own click in the current
   URL could hide a competitor's param relayed from an earlier landing in the same
   tab, until the shop removed your param.
+- **Relay: param names a page writes into the capture's `sessionStorage` copy
+  can't crowd out a real referral.** The background keeps only names the policy
+  reads, and keeps stored records within their size limits. Before, 16 made-up
+  names could make the tab's record too big to load, and the referral was lost.
 
 ## 0.4.0 - 2026-10-13
 

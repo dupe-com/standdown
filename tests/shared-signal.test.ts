@@ -364,6 +364,32 @@ describe('relay background: own click after a landing with afsrc=1', () => {
   });
 });
 
+describe('relay background: stored records stay within limits', () => {
+  it('junk param names a page plants never crowd out a real referral', async () => {
+    const relay = createRelayStanddown({
+      policies: allPolicies,
+      chrome: { storage: { local: callbackArea(), session: callbackArea() } },
+      now: () => 0,
+    });
+    await relay.ingestCapture(
+      2,
+      { v: 1, host: 'merchant.example', at: 1_000, matches: [{ policyId: 'cj', params: ['cjevent'] }] },
+      1_000,
+    );
+    const junk = Array.from({ length: 16 }, (_, i) => `junk${i}`);
+    await relay.ingestCapture(
+      2,
+      { v: 1, host: 'merchant.example', at: 1_001, matches: [{ policyId: 'cj', params: junk }] },
+      1_001,
+    );
+    await expect(relay.shouldStandDown(2, `${shop}/`, 1_100)).resolves.toMatchObject({
+      standDown: true,
+      policyId: 'cj',
+    });
+    expect((await relay.landingFor(2, 1_100))?.matches).toEqual([{ policyId: 'cj', params: ['cjevent'] }]);
+  });
+});
+
 function callbackArea() {
   const data: Record<string, unknown> = {};
   return {
