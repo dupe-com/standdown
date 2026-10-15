@@ -52,6 +52,21 @@ export default ({ u }) => ({
       expect: { relay: true },
     },
     {
+      // afsrc=1 is shared: our own CJ click explains it, and a competitor's CJ
+      // click that carried it is still lifted by our later CJ click.
+      name: "lift: competitor's CJ click with afsrc=1, then our CJ click with afsrc=1 -> clear",
+      steps: [
+        u('l7.example', '/strip?cjevent=abc&afsrc=1'),
+        u('l7.example', '/strip?cjevent=own-click&afsrc=1'),
+      ],
+      expect: { relay: false },
+    },
+    {
+      name: 'lift: afsrc=1 alone, then our CJ click -> still stands down (shared only)',
+      steps: [u('l8.example', '/strip?afsrc=1'), u('l8.example', '/strip?cjevent=own-click')],
+      expect: { relay: true },
+    },
+    {
       name: 'lift: our own click alone -> clear (exempt as before)',
       steps: [u('l5.example', '/strip?cjevent=own-click')],
       expect: { relay: false },

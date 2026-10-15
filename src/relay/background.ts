@@ -1,4 +1,4 @@
-import { detect, domainRuleMatchesUrl } from '../detect';
+import { detect, domainRuleMatchesUrl, isSharedGroup } from '../detect';
 import { pickSessionOptions, StanddownSession } from '../session';
 import {
   ChromeLocalStateStore,
@@ -279,11 +279,22 @@ export function createRelayStanddown(
     return carriesOver(landing, host, at, landing.self ?? [], (policyId) => policyId);
   }
 
+  /** A relayed match whose every param is a shared signal (`afsrc=1`) in its policy. */
+  const sharedOnlyMatch = (match: LandingMatch) => {
+    const groups = policyById.get(match.policyId)?.detection.landingParams?.flatMap((rule) => rule.anyOf) ?? [];
+    return match.params.every((name) => {
+      const holding = groups.filter((group) => group.allOf.some((m) => m.name === name));
+      return holding.length > 0 && holding.every(isSharedGroup);
+    });
+  };
+
   /**
    * An older landing followed by a newer capture: per network, the newer one
    * wins. A newer own click drops that network's older referral params, and a
-   * newer referral drops that network's older own click. With `selfClickLift`
-   * off there is no own-click data, so this is a plain merge.
+   * newer referral drops that network's older own click. As in the session's
+   * lift, the older shared-only params (`afsrc=1`) go too when the own click
+   * covers every network-specific one, and stay when they were alone. With
+   * `selfClickLift` off there is no own-click data, so this is a plain merge.
    */
   function combine(
     older: { matches: readonly LandingMatch[]; self?: readonly string[]; selfAt?: number },
@@ -291,8 +302,12 @@ export function createRelayStanddown(
     newerSelf: readonly string[],
     newerAt: number,
   ): Pick<TabLanding, 'matches' | 'self' | 'selfAt'> {
+    const ownNetwork = (match: LandingMatch) => newerSelf.some((id) => sameNetwork(id, match.policyId));
+    const specific = older.matches.filter((match) => !sharedOnlyMatch(match));
+    const coversAll = specific.length > 0 && specific.every(ownNetwork);
     const matches = mergeMatches(
-      older.matches.filter((match) => !newerSelf.some((id) => sameNetwork(id, match.policyId))),
+      // Shared-only matches name no network, so only `coversAll` drops them.
+      older.matches.filter((match) => (sharedOnlyMatch(match) ? !coversAll : !ownNetwork(match))),
       newerMatches,
     );
     const self = [

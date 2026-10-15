@@ -224,6 +224,47 @@ describe('relay background reports matched params', () => {
   });
 });
 
+describe('relay background: own click after a landing with afsrc=1', () => {
+  const ownCapture = { v: 1 as const, host: 'merchant.example', at: 2_000, matches: [], self: ['cj'] };
+  const run = async (first: { policyId: string; params: string[] }[], queryBetween: boolean) => {
+    const relay = createRelayStanddown({
+      policies: allPolicies,
+      selfPatterns: ownCj,
+      selfClickLift: 'same-network',
+      chrome: { storage: { local: callbackArea(), session: callbackArea() } },
+      now: () => 0,
+    });
+    await relay.ingestCapture(4, { v: 1, host: 'merchant.example', at: 1_000, matches: first }, 1_000);
+    if (queryBetween) await relay.shouldStandDown(4, `${shop}/`, 1_500);
+    await relay.ingestCapture(4, ownCapture, 2_000);
+    return relay.shouldStandDown(4, `${shop}/`, 2_100);
+  };
+  const competitorCj = [
+    { policyId: 'cj', params: ['cjevent', 'afsrc'] },
+    { policyId: 'impact', params: ['afsrc'] },
+    { policyId: 'universal', params: ['afsrc'] },
+  ];
+  const afsrcAlone = [
+    { policyId: 'cj', params: ['afsrc'] },
+    { policyId: 'impact', params: ['afsrc'] },
+    { policyId: 'universal', params: ['afsrc'] },
+  ];
+
+  it.each([false, true])("clears a competitor's CJ click that carried afsrc=1 (queried between: %s)", async (q) => {
+    await expect(run(competitorCj, q)).resolves.toMatchObject({ standDown: false });
+  });
+
+  it.each([false, true])('keeps a stand-down from afsrc=1 alone (queried between: %s)', async (q) => {
+    await expect(run(afsrcAlone, q)).resolves.toMatchObject({ standDown: true });
+  });
+
+  it.each([false, true])("keeps it when another network's own param came too (queried between: %s)", async (q) => {
+    await expect(run([...competitorCj, { policyId: 'impact', params: ['irclickid'] }], q)).resolves.toMatchObject({
+      standDown: true,
+    });
+  });
+});
+
 function callbackArea() {
   const data: Record<string, unknown> = {};
   return {
