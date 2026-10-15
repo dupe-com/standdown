@@ -46,6 +46,10 @@ function merchantHostFor(policy: StanddownPolicy): string {
 
 function valueForMatcher(matcher: ParamMatcher): string {
   if (matcher.match === 'contains') return `before-${matcher.value}-after`;
+  if (matcher.match === 'pattern') {
+    if (matcher.example === undefined) throw new Error(`pattern matcher ${matcher.name} needs an example`);
+    return matcher.example;
+  }
   return matcher.value ?? 'value';
 }
 

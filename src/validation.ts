@@ -1,3 +1,4 @@
+import { compiledPattern, patternProblem } from './pattern';
 import type {
   Behavior,
   CookieRule,
@@ -13,7 +14,7 @@ const BEHAVIORS = new Set<Behavior>([
   'no-background-tracking',
 ]);
 
-const PARAM_MATCHES = new Set(['exists', 'equals', 'contains']);
+const PARAM_MATCHES = new Set(['exists', 'equals', 'contains', 'pattern']);
 const COOKIE_MATCHES = new Set(['exact', 'substring']);
 const DOMAIN_KINDS = new Set(['suffix', 'regex']);
 const REFERRER_CLASSES = new Set([
@@ -271,10 +272,30 @@ function validateParamMatcher(matcherValue: unknown): void {
   }
 
   if (
-    (matcher.match === 'equals' || matcher.match === 'contains') &&
+    (matcher.match === 'equals' || matcher.match === 'contains' || matcher.match === 'pattern') &&
     matcher.value === undefined
   ) {
-    throw new TypeError('ParamMatcher.value is required for equals/contains');
+    throw new TypeError('ParamMatcher.value is required for equals/contains/pattern');
+  }
+
+  if (matcher.match === 'pattern') {
+    const problem = patternProblem(matcher.value as string);
+
+    if (problem !== undefined) {
+      throw new TypeError(`ParamMatcher.value pattern ${problem}`);
+    }
+  }
+
+  if (matcher.example !== undefined) {
+    string(matcher.example, 'ParamMatcher.example');
+
+    if (matcher.match !== 'pattern') {
+      throw new TypeError('ParamMatcher.example is only for match: pattern');
+    }
+
+    if (!compiledPattern(matcher.value as string)?.test(matcher.example)) {
+      throw new TypeError('ParamMatcher.example does not match its pattern');
+    }
   }
 }
 

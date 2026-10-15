@@ -14,6 +14,13 @@ export interface ParamPair {
 }
 
 function valueForMatcher(matcher: ParamMatcher): string {
+  if (matcher.match === 'pattern') {
+    // A regex can't be turned into a value; policies ship a validated example.
+    if (matcher.example === undefined) {
+      throw new Error(`pattern matcher ${matcher.name} needs an example`);
+    }
+    return matcher.example;
+  }
   if (matcher.match === 'contains') {
     return `before-${matcher.value}-after`;
   }

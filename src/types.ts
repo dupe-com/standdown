@@ -4,12 +4,23 @@ export type Behavior =
   | 'no-redirect'
   | 'no-background-tracking';
 
-export type ParamMatchMode = 'exists' | 'equals' | 'contains';
+/**
+ * How a param's value is compared. `'pattern'`: `value` is a JavaScript
+ * regular-expression SOURCE (no flags), anchored with `^` and `$`, at most 256
+ * characters; it matches when any of the param's values satisfies it. Avoid
+ * nested quantifiers like `(a+)+` (catastrophic backtracking).
+ */
+export type ParamMatchMode = 'exists' | 'equals' | 'contains' | 'pattern';
 
 export interface ParamMatcher {
   name: string;
   value?: string;
   match?: ParamMatchMode;
+  /**
+   * `'pattern'` only: a sample value the pattern matches. Validation checks it;
+   * graders and docs use it to build a matching landing. Never a real ID.
+   */
+  example?: string;
 }
 
 export interface ParamGroup {

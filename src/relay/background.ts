@@ -183,6 +183,10 @@ export function createRelayStanddown(
   const store = opts.store ?? defaultStore(chromeApi, now);
   const session = new StanddownSession(store, pickSessionOptions(opts));
   const policyById = new Map(opts.policies.map((policy) => [policy.id, policy]));
+  // Replay can't reconstruct a value that fits a `pattern` (capture keeps names
+  // only), so the replay runs against a copy where each such group also accepts
+  // the replay placeholder. The original group stays, for values still in the URL.
+  const replayPolicies = opts.policies.map(withReplayablePatterns);
   const liftOn = opts.selfClickLift === 'same-network';
   const sameNetwork = (a: string, b: string) =>
     a === b ||
@@ -443,7 +447,7 @@ export function createRelayStanddown(
     }
 
     const replayed: Signals = { ...signals, url: replayUrl(url, relayed, policyById) };
-    const decision = await session.ingest(replayed, opts.policies);
+    const decision = await session.ingest(replayed, replayPolicies);
 
     if (lifted && !decision.standDown && decision.reason === 'no-active-standdown') {
       return { ...decision, reason: 'self-click-lifted' };
@@ -455,7 +459,7 @@ export function createRelayStanddown(
 
     try {
       const before = detect(signals, opts.policies);
-      const after = detect(replayed, opts.policies);
+      const after = detect(replayed, replayPolicies);
 
       if (before.strongest === undefined && after.strongest !== undefined) {
         return { ...decision, matchKind: 'landing' };
@@ -580,6 +584,41 @@ export function createRelayStanddown(
  * (`equals` / `contains` constants) or a placeholder for `exists`; the page's
  * real values were never captured.
  */
+/**
+ * `policy` with every landing group that uses a `pattern` matcher duplicated as
+ * a group whose pattern matchers equal {@link RELAY_PLACEHOLDER}, the value the
+ * replay appends. The capture already checked the real value against the
+ * pattern in the page. Unchanged policies are returned as is.
+ */
+function withReplayablePatterns(policy: StanddownPolicy): StanddownPolicy {
+  const landingParams = policy.detection.landingParams;
+
+  if (!landingParams?.some((rule) => rule.anyOf.some((g) => g.allOf.some((m) => m.match === 'pattern')))) {
+    return policy;
+  }
+
+  return {
+    ...policy,
+    detection: {
+      ...policy.detection,
+      landingParams: landingParams.map((rule) => ({
+        anyOf: rule.anyOf.flatMap((group) =>
+          group.allOf.some((m) => m.match === 'pattern')
+            ? [
+                group,
+                {
+                  allOf: group.allOf.map((m) =>
+                    m.match === 'pattern' ? { name: m.name, match: 'equals' as const, value: RELAY_PLACEHOLDER } : m,
+                  ),
+                },
+              ]
+            : [group],
+        ),
+      })),
+    },
+  };
+}
+
 function replayUrl(
   url: string,
   relayed: readonly LandingMatch[],
@@ -598,7 +637,10 @@ function replayUrl(
       for (const group of rule.anyOf) {
         if (group.allOf.every((matcher) => names.has(matcher.name))) {
           for (const matcher of group.allOf) {
-            target.searchParams.append(matcher.name, matcher.value ?? RELAY_PLACEHOLDER);
+            target.searchParams.append(
+              matcher.name,
+              matcher.match === 'pattern' ? RELAY_PLACEHOLDER : (matcher.value ?? RELAY_PLACEHOLDER),
+            );
           }
         }
       }

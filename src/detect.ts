@@ -1,3 +1,4 @@
+import { compiledPattern, MAX_PATTERN_INPUT } from './pattern';
 import type {
   CookieRule,
   Detection,
@@ -340,6 +341,15 @@ export function paramMatcherMatches(
     return values.some((value) => value === expectedValue);
   }
 
+  if (mode === 'pattern') {
+    // Compiled once per source; an invalid source never matches.
+    const pattern = compiledPattern(expectedValue);
+    return (
+      pattern !== undefined &&
+      values.some((value) => value.length <= MAX_PATTERN_INPUT && pattern.test(value))
+    );
+  }
+
   return values.some((value) => value.includes(expectedValue));
 }
 
@@ -426,3 +436,5 @@ function parseUrl(value: string): URL | undefined {
 function hostFromUrl(value: string): string | undefined {
   return parseUrl(value)?.hostname.toLowerCase();
 }
+
+export { patternCacheSizeForTests } from './pattern';
