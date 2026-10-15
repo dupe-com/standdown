@@ -464,6 +464,29 @@ export function createRelayStanddown(
     const replayed: Signals = { ...signals, url: replayUrl(url, relayed, policyById) };
     const decision = await session.ingest(replayed, replayPolicies);
 
+    // A relayed shared-only match (afsrc=1) came from an earlier landing: the
+    // capture drops one that rode with an own click, and `combine` drops those an
+    // own click covered. So an own click in THIS url must not explain it. Decide
+    // it on its own, on the bare page address without own-click patterns.
+    const sharedRelayed = relayed.filter(sharedOnlyMatch);
+
+    if (!decision.standDown && sharedRelayed.length > 0) {
+      const page = new URL(url);
+      const shared = await session.ingest(
+        {
+          url: replayUrl(`${page.origin}${page.pathname}`, sharedRelayed, policyById),
+          now: at,
+          signalCoverage: 'partial',
+          ...(opts.publisherSites === undefined ? {} : { publisherSites: opts.publisherSites }),
+        },
+        replayPolicies,
+      );
+
+      if (shared.standDown) {
+        return { ...shared, matchKind: 'landing' };
+      }
+    }
+
     if (lifted && !decision.standDown && decision.reason === 'no-active-standdown') {
       return { ...decision, reason: 'self-click-lifted' };
     }

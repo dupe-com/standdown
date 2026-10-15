@@ -11,8 +11,9 @@
  * split to try per position, so matching time grows with the value's length,
  * not exponentially. Sources must also compile, be at most
  * {@link MAX_PATTERN_LENGTH} characters, carry no flags, and be anchored with
- * `^` and `$`. Each source compiles once; an invalid one never matches (for a
- * self-exemption that errs toward standing down).
+ * `^` and `$`. Each source compiles once. Validation rejects an invalid one, so
+ * sessions and adapters stand down; at match time it simply never matches (for
+ * a self-exemption that errs toward standing down).
  */
 
 export const MAX_PATTERN_LENGTH = 256;

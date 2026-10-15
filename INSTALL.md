@@ -394,12 +394,13 @@ and predictable:
   stacked repeats (`a*a*a*`) or chains of choices (`(a|a)(a|a)…`) can take
   seconds or longer on a short value, so they are rejected.
 - Validation rejects a pattern outside that subset, or one that doesn't compile,
-  isn't anchored or is too long. A policy with a rejected pattern fails closed
-  (stands down).
+  isn't anchored or is too long. Sessions and every adapter validate policies
+  first, so a policy with a rejected pattern stands down. (Calling `detect()`
+  directly skips validation: there a rejected pattern simply never matches.)
 - A value longer than 512 characters never matches.
 - `example` (optional, `'pattern'` only) is a made-up value the pattern must
-  match. Validation checks it, and the conformance grader uses it to build a
-  matching landing. Never put a real ID there.
+  match, at most 512 characters. Validation checks it, and the conformance grader
+  uses it to build a matching landing. Never put a real ID there.
 
 `shared: true` marks a signal several networks append, like `afsrc=1` (also on a
 `redirectDomains` rule). It still stands down on its own. When the same URL

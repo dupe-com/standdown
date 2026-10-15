@@ -282,6 +282,26 @@ describe('relay background: own click after a landing with afsrc=1', () => {
     await expect(run(afsrcAlone, q)).resolves.toMatchObject({ standDown: true });
   });
 
+  it.each([
+    ['still in the URL', `${shop}/b?my_click_id=own`],
+    ['already stripped', `${shop}/b`],
+  ])('afsrc=1 alone from an earlier landing still stands down after our click (own param %s)', async (_label, url) => {
+    const relay = createRelayStanddown({
+      policies: allPolicies,
+      selfPatterns: ownCj,
+      selfClickLift: 'same-network',
+      chrome: { storage: { local: callbackArea(), session: callbackArea() } },
+      now: () => 0,
+    });
+    await relay.ingestCapture(5, { v: 1, host: 'merchant.example', at: 1_000, matches: afsrcAlone }, 1_000);
+    await relay.ingestCapture(5, ownCapture, 2_000);
+    await expect(relay.shouldStandDown(5, url, 2_100)).resolves.toMatchObject({
+      standDown: true,
+      matchKind: 'landing',
+      sharedOnly: true,
+    });
+  });
+
   it.each([false, true])("keeps it when another network's own param came too (queried between: %s)", async (q) => {
     await expect(run([...competitorCj, { policyId: 'impact', params: ['irclickid'] }], q)).resolves.toMatchObject({
       standDown: true,

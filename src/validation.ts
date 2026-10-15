@@ -1,4 +1,4 @@
-import { compiledPattern, patternProblem } from './pattern';
+import { compiledPattern, MAX_PATTERN_INPUT, patternProblem } from './pattern';
 import type {
   Behavior,
   CookieRule,
@@ -295,6 +295,11 @@ function validateParamMatcher(matcherValue: unknown): void {
 
     if (matcher.match !== 'pattern') {
       throw new TypeError('ParamMatcher.example is only for match: pattern');
+    }
+
+    // Same bound as real values, so checking it stays cheap.
+    if (matcher.example.length > MAX_PATTERN_INPUT) {
+      throw new TypeError(`ParamMatcher.example is longer than ${MAX_PATTERN_INPUT} characters`);
     }
 
     if (!compiledPattern(matcher.value as string)?.test(matcher.example)) {

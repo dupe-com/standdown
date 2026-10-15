@@ -91,6 +91,20 @@ describe("validatePolicy: 'pattern' safety", () => {
     expect(() => validatePolicy(sitePolicy(value))).toThrow(/pattern/i);
   });
 
+  it('rejects an example longer than 512 characters (keeps validation cheap)', () => {
+    const withExample = (example: string): StanddownPolicy => ({
+      ...sitePolicy('^.*.{250}x$'),
+      detection: {
+        landingParams: [{ anyOf: [{ allOf: [{ name: 'siteID', match: 'pattern', value: '^.*.{250}x$', example }] }] }],
+        cookiePatterns: [],
+      },
+    });
+    expect(() => validatePolicy(withExample(`${'a'.repeat(511)}x`))).not.toThrow();
+    const started = Date.now();
+    expect(() => validatePolicy(withExample('a'.repeat(1_000_000)))).toThrow(/longer than 512/);
+    expect(Date.now() - started).toBeLessThan(50);
+  });
+
   it('rejects a pattern matcher without a value', () => {
     const policy = sitePolicy(RAKUTEN_SITE_ID) as StanddownPolicy & {
       detection: { landingParams: { anyOf: { allOf: { name: string; match: string }[] }[] }[] };

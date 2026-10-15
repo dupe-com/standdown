@@ -34,8 +34,8 @@ existing users will notice:
   expression (`^…$`, no flags, at most 256 characters), checked against each
   value of the param. To keep matching fast, only a small subset is accepted:
   single characters or classes with counts, at most one of them variable-length,
-  and no groups or `|`. Validation rejects anything else, and a policy with a
-  rejected pattern fails closed. Values over 512
+  and no groups or `|`. Validation rejects anything else, so sessions and adapters
+  stand down with such a policy. Values over 512
   characters never match. Works in detection, the content, webext and relay
   adapters, and `selfPatterns`. An optional `example` documents a matching value
   and is checked by validation and used by the conformance grader.
