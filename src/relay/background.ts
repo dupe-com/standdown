@@ -602,13 +602,21 @@ function withReplayablePatterns(policy: StanddownPolicy): StanddownPolicy {
     detection: {
       ...policy.detection,
       landingParams: landingParams.map((rule) => ({
+        ...rule,
         anyOf: rule.anyOf.flatMap((group) =>
           group.allOf.some((m) => m.match === 'pattern')
             ? [
                 group,
                 {
                   allOf: group.allOf.map((m) =>
-                    m.match === 'pattern' ? { name: m.name, match: 'equals' as const, value: RELAY_PLACEHOLDER } : m,
+                    m.match === 'pattern'
+                      ? {
+                          name: m.name,
+                          match: 'equals' as const,
+                          value: RELAY_PLACEHOLDER,
+                          ...(m.shared === undefined ? {} : { shared: m.shared }),
+                        }
+                      : m,
                   ),
                 },
               ]

@@ -271,6 +271,10 @@ function validateParamMatcher(matcherValue: unknown): void {
     throw new TypeError('ParamMatcher.match is invalid');
   }
 
+  if (matcher.shared !== undefined && typeof matcher.shared !== 'boolean') {
+    throw new TypeError('ParamMatcher.shared must be a boolean');
+  }
+
   if (
     (matcher.match === 'equals' || matcher.match === 'contains' || matcher.match === 'pattern') &&
     matcher.value === undefined
@@ -305,6 +309,10 @@ function validateDomainRule(ruleValue: unknown): void {
 
   if (!DOMAIN_KINDS.has(rule.kind)) {
     throw new TypeError('DomainRule.kind is invalid');
+  }
+
+  if (rule.shared !== undefined && typeof rule.shared !== 'boolean') {
+    throw new TypeError('DomainRule.shared must be a boolean');
   }
 
   if (rule.kind === 'suffix') {

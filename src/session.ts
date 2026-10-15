@@ -4,6 +4,7 @@ import type {
   Decision,
   Detection,
   ExemptionRecord,
+  MatchedRule,
   SelfExemptScope,
   SessionRecord,
   Signals,
@@ -247,6 +248,9 @@ export class StanddownSession {
           };
         }
 
+        const evidence = effective.matched.filter(
+          (match) => match.advertiserHost === effective.strongest?.advertiserHost,
+        );
         const record = upsertSessionRecord(
           state,
           stateKey ?? effective.strongest.advertiserHost,
@@ -255,13 +259,17 @@ export class StanddownSession {
           matchedPolicies,
           signals.now,
           effective.matched.some((match) => match.kind === 'disabled-host'),
+          sharedOnlyPolicies(evidence),
         );
 
         return {
-          decision: decisionFromRecord(record, signals.now, {
-            reason: effective.strongest.reason,
-            referrerClass: classifyReferrer(signals, record.advertiserHost),
-          }),
+          decision: withMatchedParams(
+            decisionFromRecord(record, signals.now, {
+              reason: effective.strongest.reason,
+              referrerClass: classifyReferrer(signals, record.advertiserHost),
+            }),
+            evidence,
+          ),
           detection: effective,
         };
       }
@@ -592,9 +600,22 @@ function upsertSessionRecord(
   policies: readonly StanddownPolicy[],
   now: number,
   viaDisabledHost = false,
+  sharedNow: ReadonlySet<string> = new Set(),
 ): SessionRecord {
   const key = normalizeHost(stateKey);
   const existing = state.sessions[key];
+  // A policy stays shared-only while every match that fed it was shared. A
+  // record saved before this field existed counts its contributors as specific.
+  const earlierShared = new Set(existing?.sharedOnlyPolicyIds ?? []);
+  const earlierIds = new Set(existing ? (existing.policyIds ?? [UNKNOWN_CONTRIBUTORS]) : []);
+  const sharedOnlyPolicyIds = [
+    ...new Set([
+      ...[...earlierShared].filter((id) => !policies.some((policy) => policy.id === id)),
+      ...policies
+        .map((policy) => policy.id)
+        .filter((id) => sharedNow.has(id) && (!earlierIds.has(id) || earlierShared.has(id))),
+    ]),
+  ];
   const startedAt = existing?.startedAt ?? now;
   const lastActivityAt = now;
   const sessionRule =
@@ -626,6 +647,7 @@ function upsertSessionRecord(
     ],
     lastReferralAt: now,
     ...(existing?.disabledHost || viaDisabledHost ? { disabledHost: true as const } : {}),
+    ...(sharedOnlyPolicyIds.length > 0 ? { sharedOnlyPolicyIds } : {}),
   };
 
   if (sessionRule === 'inactivity-window') {
@@ -821,6 +843,34 @@ function policiesForDetection(
   return policies.filter((policy) => matchingPolicyIds.has(policy.id));
 }
 
+/** Policies whose every match here rests only on shared signals (`afsrc=1`). */
+function sharedOnlyPolicies(matches: readonly MatchedRule[]): Set<string> {
+  const shared = new Set<string>();
+  const specific = new Set<string>();
+
+  for (const match of matches) {
+    (match.sharedOnly === true ? shared : specific).add(match.policyId);
+  }
+
+  return new Set([...shared].filter((id) => !specific.has(id)));
+}
+
+/** Adds the matched landing param names (never values) to a fresh stand-down. */
+function withMatchedParams(decision: Decision, matches: readonly MatchedRule[]): Decision {
+  if (!decision.standDown || matches.length === 0) {
+    return decision;
+  }
+
+  const params = [...new Set(matches.flatMap((match) => match.params ?? []))];
+  const sharedOnly = matches.every((match) => match.sharedOnly === true);
+
+  return {
+    ...decision,
+    ...(params.length > 0 ? { matchedParams: params } : {}),
+    ...(sharedOnly ? { sharedOnly: true as const } : {}),
+  };
+}
+
 function unionBehaviors(behaviors: readonly SessionRecord['behaviors'][number][]) {
   return [...new Set(behaviors)];
 }
@@ -888,12 +938,22 @@ function liftSelfClick(
 
   const networkOf = new Map(policies.map((policy) => [policy.id, policy.network.id]));
 
-  // A record the universal catch-all fed (afsrc=1, network unknown) can't be
-  // attributed to the own click's network, so it is never lifted.
-  if (record.policyIds.some((id) => networkOf.get(id) === UNIVERSAL_NETWORK_ID)) {
+  // Shared-only contributors (afsrc=1 alone) name no network, so they neither
+  // need covering nor can carry a lift: at least one network-specific
+  // contributor must, and the own click must cover all of those.
+  const sharedOnly = new Set(record.sharedOnlyPolicyIds ?? []);
+  const specific = record.policyIds.filter((id) => !sharedOnly.has(id));
+
+  if (specific.length === 0) {
     return false;
   }
-  const covered = record.policyIds.every((id) =>
+
+  // A record the universal catch-all fed through a non-shared rule (a redirect
+  // domain, network unknown) can't be attributed to the own click's network.
+  if (specific.some((id) => networkOf.get(id) === UNIVERSAL_NETWORK_ID)) {
+    return false;
+  }
+  const covered = specific.every((id) =>
     scopes.some((scope) => scope.policyId === id || scope.networkId === networkOf.get(id)),
   );
   const latestReferral = record.lastReferralAt ?? Math.max(record.startedAt, record.lastActivityAt);
@@ -1041,6 +1101,9 @@ function cloneState(state: StanddownState): StanddownState {
           ...record,
           behaviors: [...record.behaviors],
           ...(record.policyIds ? { policyIds: [...record.policyIds] } : {}),
+          ...(record.sharedOnlyPolicyIds
+            ? { sharedOnlyPolicyIds: [...record.sharedOnlyPolicyIds] }
+            : {}),
         },
       ]),
     ),

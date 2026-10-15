@@ -21,6 +21,15 @@ export interface ParamMatcher {
    * graders and docs use it to build a matching landing. Never a real ID.
    */
   example?: string;
+  /**
+   * Marks a signal several networks append, like `afsrc=1`, so it does not say
+   * which network referred the shopper. It still stands down on its own. Two
+   * things change when a param group is made only of shared matchers: when the
+   * same URL carries the host's own scoped click (`selfPatterns`), the group is
+   * explained by that click and does not match; and `selfClickLift` never
+   * counts it as a network's own evidence. Ignored in `selfPatterns`.
+   */
+  shared?: boolean;
 }
 
 export interface ParamGroup {
@@ -42,6 +51,13 @@ export interface DomainRule {
   pattern: string;
   kind: 'suffix' | 'regex';
   comment?: string;
+  /**
+   * `redirectDomains` only: the rule matches a shared signal (a URL carrying
+   * `afsrc=1`), not one network's domain. Treated like a shared
+   * {@link ParamMatcher}: explained by the host's own scoped click in the
+   * landing URL, and never counted as a network's own evidence.
+   */
+  shared?: boolean;
 }
 
 export type ReferrerClass =
@@ -158,6 +174,13 @@ export interface MatchedRule {
   advertiserHost: string;
   reason: string;
   sourceUrl: string;
+  /** `landing-param` only: the matched param names, as the policy spells them. */
+  params?: string[];
+  /**
+   * The match rests only on shared signals (`afsrc=1`): every matched group is
+   * made of shared matchers, or the redirect rule is a shared one.
+   */
+  sharedOnly?: true;
 }
 
 export interface SelfExemptScope {
@@ -211,6 +234,18 @@ export interface Decision {
    * that forwarded here). Absent when the param is still in the URL.
    */
   matchKind?: 'landing';
+  /**
+   * On a stand-down this navigation's own params triggered: the landing param
+   * names that matched, as the policy spells them (never values). Absent when
+   * no landing param matched, or the decision comes from an earlier referral.
+   */
+  matchedParams?: string[];
+  /**
+   * Set with `matchedParams` when every signal behind the stand-down is a
+   * shared one (`afsrc=1`), so `policyId` names a network that may not be the
+   * one that referred the shopper.
+   */
+  sharedOnly?: true;
 }
 
 export interface UserGesture {
@@ -252,6 +287,12 @@ export interface SessionRecord {
   lastReferralAt?: number;
   /** Set once a `disableHosts` match fed this record; such a record is never lifted. */
   disabledHost?: true;
+  /**
+   * The subset of `policyIds` that only ever matched through shared signals
+   * (`afsrc=1`). `selfClickLift` doesn't need the own click to cover these, but
+   * never lifts a record whose contributors are all shared-only.
+   */
+  sharedOnlyPolicyIds?: string[];
 }
 
 /**

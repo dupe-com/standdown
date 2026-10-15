@@ -31,7 +31,7 @@ export const cocDefaults = {
 export const cjPolicy = {
   id: 'cj',
   schemaVersion: 3,
-  policyVersion: '0.2.0',
+  policyVersion: '0.3.0',
   network: {
     id: 'cj',
     name: 'CJ Affiliate',
@@ -50,7 +50,7 @@ export const cjPolicy = {
         anyOf: [{ allOf: [{ name: 'sf_cs', value: 'cj', match: 'equals' }] }],
       },
       {
-        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals' }] }],
+        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals', shared: true }] }],
       },
     ],
     redirectDomains: [
@@ -112,7 +112,7 @@ export const impactPolicy = {
   detection: {
     landingParams: [
       {
-        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals' }] }],
+        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals', shared: true }] }],
       },
       { anyOf: [{ allOf: [{ name: 'irclickid' }] }] },
       { anyOf: [{ allOf: [{ name: 'irgwc' }] }] },
@@ -408,7 +408,7 @@ export const partnerizePolicy = {
 export const universalPolicy = {
   id: 'universal',
   schemaVersion: 3,
-  policyVersion: '0.1.0',
+  policyVersion: '0.2.0',
   network: {
     id: 'universal',
     name: 'Universal affiliate source',
@@ -417,7 +417,7 @@ export const universalPolicy = {
   detection: {
     landingParams: [
       {
-        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals' }] }],
+        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals', shared: true }] }],
       },
     ],
     redirectDomains: [
@@ -425,6 +425,7 @@ export const universalPolicy = {
         pattern: '^https?\\:\\/.*[\\?\\&]afsrc=1',
         kind: 'regex',
         comment: 'Universal standdown parameter from piedotorg/standdown-domains',
+        shared: true,
       },
       {
         pattern: '^https?:\\/\\/www\\.youtube\\.com\\/redirect',

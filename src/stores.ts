@@ -433,6 +433,7 @@ function parseSessionRecord(value: unknown): SessionRecord {
     policyIds,
     lastReferralAt,
     disabledHost,
+    sharedOnlyPolicyIds,
   } = value;
 
   if (
@@ -449,7 +450,10 @@ function parseSessionRecord(value: unknown): SessionRecord {
     (policyIds !== undefined &&
       (!Array.isArray(policyIds) || !policyIds.every((id) => typeof id === 'string'))) ||
     (lastReferralAt !== undefined && typeof lastReferralAt !== 'number') ||
-    (disabledHost !== undefined && disabledHost !== true)
+    (disabledHost !== undefined && disabledHost !== true) ||
+    (sharedOnlyPolicyIds !== undefined &&
+      (!Array.isArray(sharedOnlyPolicyIds) ||
+        !sharedOnlyPolicyIds.every((id) => typeof id === 'string')))
   ) {
     throw new Error('invalid session record');
   }
@@ -482,6 +486,10 @@ function parseSessionRecord(value: unknown): SessionRecord {
 
   if (disabledHost === true) {
     record.disabledHost = true;
+  }
+
+  if (sharedOnlyPolicyIds !== undefined) {
+    record.sharedOnlyPolicyIds = [...sharedOnlyPolicyIds];
   }
 
   return record;
@@ -574,6 +582,10 @@ function cloneSessionRecord(record: SessionRecord): SessionRecord {
 
   if (record.lastReferralAt !== undefined) {
     next.lastReferralAt = record.lastReferralAt;
+  }
+
+  if (record.sharedOnlyPolicyIds !== undefined) {
+    next.sharedOnlyPolicyIds = [...record.sharedOnlyPolicyIds];
   }
 
   if (record.disabledHost === true) {
