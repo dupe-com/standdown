@@ -120,6 +120,12 @@ export interface TabLanding {
   /** `selfClickLift` only: policies the tab's latest own click covered, and when. */
   readonly self?: readonly string[];
   readonly selfAt?: number;
+  /**
+   * Set once a capture in this record carried shared signals alone (`afsrc=1`
+   * and nothing network-specific). Its shared matches are then never dropped
+   * by a later own click, mirroring the session's `sharedReferral`.
+   */
+  readonly sharedAlone?: true;
 }
 
 export interface RelayMessageResponse {
@@ -297,14 +303,23 @@ export function createRelayStanddown(
    * `selfClickLift` off there is no own-click data, so this is a plain merge.
    */
   function combine(
-    older: { matches: readonly LandingMatch[]; self?: readonly string[]; selfAt?: number },
+    older: {
+      matches: readonly LandingMatch[];
+      self?: readonly string[];
+      selfAt?: number;
+      sharedAlone?: true;
+    },
     newerMatches: readonly LandingMatch[],
     newerSelf: readonly string[],
     newerAt: number,
-  ): Pick<TabLanding, 'matches' | 'self' | 'selfAt'> {
+  ): Pick<TabLanding, 'matches' | 'self' | 'selfAt' | 'sharedAlone'> {
     const ownNetwork = (match: LandingMatch) => newerSelf.some((id) => sameNetwork(id, match.policyId));
     const specific = older.matches.filter((match) => !sharedOnlyMatch(match));
-    const coversAll = specific.length > 0 && specific.every(ownNetwork);
+    // Merged per policy, the matches no longer say which landing carried what:
+    // after a landing of shared signals alone, an own click never drops them.
+    const coversAll = !older.sharedAlone && specific.length > 0 && specific.every(ownNetwork);
+    const sharedAlone =
+      older.sharedAlone || (newerMatches.length > 0 && newerMatches.every(sharedOnlyMatch));
     const matches = mergeMatches(
       // Shared-only matches name no network, so only `coversAll` drops them.
       older.matches.filter((match) => (sharedOnlyMatch(match) ? !coversAll : !ownNetwork(match))),
@@ -320,7 +335,11 @@ export function createRelayStanddown(
     ];
     const selfAt = newerSelf.length > 0 ? newerAt : older.selfAt;
 
-    return self.length > 0 && selfAt !== undefined ? { matches, self, selfAt } : { matches };
+    return {
+      matches,
+      ...(self.length > 0 && selfAt !== undefined ? { self, selfAt } : {}),
+      ...(sharedAlone ? { sharedAlone: true as const } : {}),
+    };
   }
 
   async function ingestCapture(
@@ -363,10 +382,13 @@ export function createRelayStanddown(
       const carrySelf = carriedSelf(existing, record.host, at);
 
       if (carry.length > 0 || carrySelf.length > 0) {
-        const older =
-          carrySelf.length > 0 && existing.selfAt !== undefined
-            ? { matches: carry, self: carrySelf, selfAt: existing.selfAt }
-            : { matches: carry };
+        const older = {
+          matches: carry,
+          ...(carrySelf.length > 0 && existing.selfAt !== undefined
+            ? { self: carrySelf, selfAt: existing.selfAt }
+            : {}),
+          ...(existing.sharedAlone ? { sharedAlone: true as const } : {}),
+        };
         await save(tabId, {
           host: record.host,
           at: fresh ? Math.max(existing.at, fresh.at) : existing.at,
@@ -442,6 +464,7 @@ export function createRelayStanddown(
             at: current.at,
             lastAt: current.lastAt,
             matches: current.matches,
+            ...(current.sharedAlone ? { sharedAlone: true as const } : {}),
           });
         }
       }).catch(() => {});
@@ -464,17 +487,17 @@ export function createRelayStanddown(
     const replayed: Signals = { ...signals, url: replayUrl(url, relayed, policyById) };
     const decision = await session.ingest(replayed, replayPolicies);
 
-    // A relayed shared-only match (afsrc=1) came from an earlier landing: the
-    // capture drops one that rode with an own click, and `combine` drops those an
-    // own click covered. So an own click in THIS url must not explain it. Decide
-    // it on its own, on the bare page address without own-click patterns.
-    const sharedRelayed = relayed.filter(sharedOnlyMatch);
-
-    if (!decision.standDown && sharedRelayed.length > 0) {
+    // Every relayed match is a referral no own click accounts for: the capture
+    // never records an own click's own network or the shared signals riding
+    // with it, and `combine` drops what a newer own click covered. So an own
+    // click in THIS url (seen again, or not yet stripped) must not hide it.
+    // Decide the relayed matches on their own, on the bare page address and
+    // without own-click patterns, so the answer doesn't depend on timing.
+    if (!decision.standDown && relayed.length > 0) {
       const page = new URL(url);
-      const shared = await session.ingest(
+      const alone = await session.ingest(
         {
-          url: replayUrl(`${page.origin}${page.pathname}`, sharedRelayed, policyById),
+          url: replayUrl(`${page.origin}${page.pathname}`, relayed, policyById),
           now: at,
           signalCoverage: 'partial',
           ...(opts.publisherSites === undefined ? {} : { publisherSites: opts.publisherSites }),
@@ -482,8 +505,8 @@ export function createRelayStanddown(
         replayPolicies,
       );
 
-      if (shared.standDown) {
-        return { ...shared, matchKind: 'landing' };
+      if (alone.standDown) {
+        return { ...alone, matchKind: 'landing' };
       }
     }
 
@@ -720,6 +743,7 @@ function isTabLanding(value: unknown): value is TabLanding {
   const hasSelf = landing.self !== undefined;
   return (
     typeof landing.lastAt === 'number' &&
+    (landing.sharedAlone === undefined || landing.sharedAlone === true) &&
     (hasSelf ? typeof landing.selfAt === 'number' : landing.selfAt === undefined) &&
     isLandingRecord({
       v: 1,

@@ -172,6 +172,19 @@ describe('selfClickLift with shared signals', () => {
     ).resolves.toMatchObject({ standDown: true });
   });
 
+  it.each([
+    ['afsrc=1 alone, then a competitor CJ click', [`${shop}/?afsrc=1`, `${shop}/?cjevent=abc`]],
+    ['a competitor CJ click, then afsrc=1 alone', [`${shop}/?cjevent=abc`, `${shop}/?afsrc=1`]],
+  ])('never lifts once a separate landing carried afsrc=1 alone: %s', async (_label, landings) => {
+    const session = lifting();
+    await session.ingest({ url: landings[0] as string, now: 0 }, allPolicies);
+    await session.ingest({ url: landings[1] as string, now: 500 }, allPolicies);
+
+    await expect(
+      session.ingest({ url: ownClickUrl, now: 1_000, selfPatterns: ownCj, selfClickAt: 1_000 }, allPolicies),
+    ).resolves.toMatchObject({ standDown: true });
+  });
+
   it('records shared-only contributors, and they survive a save and reload', async () => {
     const local = new FakeChromeStorageArea();
     const store = new ChromeLocalStateStore(local, { sessionId: 's1', now: () => 0 });
@@ -301,6 +314,48 @@ describe('relay background: own click after a landing with afsrc=1', () => {
       sharedOnly: true,
     });
   });
+
+  it.each([
+    ['afsrc=1 alone first', [afsrcAlone, [{ policyId: 'cj', params: ['cjevent'] }]]],
+    ['competitor CJ first', [[{ policyId: 'cj', params: ['cjevent'] }], afsrcAlone]],
+  ] as const)('a separate afsrc=1-alone landing survives our click after a competitor CJ click (%s)', async (_l, [a, b]) => {
+    const relay = createRelayStanddown({
+      policies: allPolicies,
+      selfPatterns: ownCj,
+      selfClickLift: 'same-network',
+      chrome: { storage: { local: callbackArea(), session: callbackArea() } },
+      now: () => 0,
+    });
+    await relay.ingestCapture(6, { v: 1, host: 'merchant.example', at: 1_000, matches: [...a] }, 1_000);
+    await relay.ingestCapture(6, { v: 1, host: 'merchant.example', at: 1_500, matches: [...b] }, 1_500);
+    await relay.ingestCapture(6, ownCapture, 2_000);
+    for (const url of [`${shop}/b?my_click_id=own`, `${shop}/b`]) {
+      await expect(relay.shouldStandDown(6, url, 2_100), url).resolves.toMatchObject({ standDown: true });
+    }
+  });
+
+  it.each([`${shop}/b?my_click_id=own`, `${shop}/b`])(
+    "lift off: our click in this URL never hides an earlier landing's competitor param (%s)",
+    async (url) => {
+      const relay = createRelayStanddown({
+        policies: allPolicies,
+        selfPatterns: ownCj,
+        chrome: { storage: { local: callbackArea(), session: callbackArea() } },
+        now: () => 0,
+      });
+      await relay.ingestCapture(
+        9,
+        { v: 1, host: 'merchant.example', at: 1_000, matches: [{ policyId: 'cj', params: ['cjevent'] }] },
+        1_000,
+      );
+      await relay.ingestCapture(9, { v: 1, host: 'merchant.example', at: 2_000, matches: [] }, 2_000);
+      await expect(relay.shouldStandDown(9, url, 2_100)).resolves.toMatchObject({
+        standDown: true,
+        policyId: 'cj',
+        matchKind: 'landing',
+      });
+    },
+  );
 
   it.each([false, true])("keeps it when another network's own param came too (queried between: %s)", async (q) => {
     await expect(run([...competitorCj, { policyId: 'impact', params: ['irclickid'] }], q)).resolves.toMatchObject({

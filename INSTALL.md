@@ -463,7 +463,8 @@ It only lifts when it is safe:
   the stand-down.
 - **Never a mixed one.** If several networks fed the stand-down, it stays.
   `afsrc=1` alone doesn't count as a network here: a competitor's CJ click that
-  carried it can be lifted, and a stand-down from `afsrc=1` alone never is.
+  carried it can be lifted, and once a landing carried `afsrc=1` alone, the
+  stand-down is never lifted, whatever came before or after it.
 - **Never with a competing signal** on the same page, and never on a
   `disableHosts` host.
 
@@ -540,7 +541,8 @@ differ on a competitor's click. Then:
   the same URL, `afsrc=1` is explained by it, so scope the marker to its one
   network only (`cj` for a CJ link). Scoping it to more networks makes the click
   name two networks, so it would only exempt, never lift. A stand-down that rests
-  only on `afsrc=1` is never lifted.
+  only on `afsrc=1` is never lifted, nor one where any landing carried
+  `afsrc=1` alone.
 - **Scope every pattern** with `networkId` (or `policyId`). An unscoped pattern
   never exempts or lifts anything (see below).
 - **Prefer `equals` or a distinctive `contains` value.** A loose `contains` (e.g.

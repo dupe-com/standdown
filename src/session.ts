@@ -648,6 +648,10 @@ function upsertSessionRecord(
     lastReferralAt: now,
     ...(existing?.disabledHost || viaDisabledHost ? { disabledHost: true as const } : {}),
     ...(sharedOnlyPolicyIds.length > 0 ? { sharedOnlyPolicyIds } : {}),
+    ...(existing?.sharedReferral ||
+    (policies.length > 0 && policies.every((policy) => sharedNow.has(policy.id)))
+      ? { sharedReferral: true as const }
+      : {}),
   };
 
   if (sessionRule === 'inactivity-window') {
@@ -905,6 +909,7 @@ function liftSelfClick(
     !record ||
     scopes.length === 0 ||
     record.disabledHost === true ||
+    record.sharedReferral === true ||
     record.policyIds === undefined ||
     record.policyIds.includes(UNKNOWN_CONTRIBUTORS)
   ) {
@@ -938,9 +943,10 @@ function liftSelfClick(
 
   const networkOf = new Map(policies.map((policy) => [policy.id, policy.network.id]));
 
-  // Shared-only contributors (afsrc=1 alone) name no network, so they neither
-  // need covering nor can carry a lift: at least one network-specific
-  // contributor must, and the own click must cover all of those.
+  // Shared-only contributors (afsrc=1 that rode with a network's own param)
+  // name no network, so they neither need covering nor can carry a lift: at
+  // least one network-specific contributor must, and the own click must cover
+  // all of those. A referral of shared signals alone set `sharedReferral` above.
   const sharedOnly = new Set(record.sharedOnlyPolicyIds ?? []);
   const specific = record.policyIds.filter((id) => !sharedOnly.has(id));
 

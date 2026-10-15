@@ -434,6 +434,7 @@ function parseSessionRecord(value: unknown): SessionRecord {
     lastReferralAt,
     disabledHost,
     sharedOnlyPolicyIds,
+    sharedReferral,
   } = value;
 
   if (
@@ -451,6 +452,7 @@ function parseSessionRecord(value: unknown): SessionRecord {
       (!Array.isArray(policyIds) || !policyIds.every((id) => typeof id === 'string'))) ||
     (lastReferralAt !== undefined && typeof lastReferralAt !== 'number') ||
     (disabledHost !== undefined && disabledHost !== true) ||
+    (sharedReferral !== undefined && sharedReferral !== true) ||
     (sharedOnlyPolicyIds !== undefined &&
       (!Array.isArray(sharedOnlyPolicyIds) ||
         !sharedOnlyPolicyIds.every((id) => typeof id === 'string')))
@@ -490,6 +492,10 @@ function parseSessionRecord(value: unknown): SessionRecord {
 
   if (sharedOnlyPolicyIds !== undefined) {
     record.sharedOnlyPolicyIds = [...sharedOnlyPolicyIds];
+  }
+
+  if (sharedReferral === true) {
+    record.sharedReferral = true;
   }
 
   return record;
@@ -586,6 +592,10 @@ function cloneSessionRecord(record: SessionRecord): SessionRecord {
 
   if (record.sharedOnlyPolicyIds !== undefined) {
     next.sharedOnlyPolicyIds = [...record.sharedOnlyPolicyIds];
+  }
+
+  if (record.sharedReferral === true) {
+    next.sharedReferral = true;
   }
 
   if (record.disabledHost === true) {

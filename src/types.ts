@@ -295,6 +295,12 @@ export interface SessionRecord {
    * never lifts a record whose contributors are all shared-only.
    */
   sharedOnlyPolicyIds?: string[];
+  /**
+   * Set once a referral fed this record with shared signals alone (`afsrc=1`
+   * and nothing network-specific). Its network is unknown, so `selfClickLift`
+   * never lifts the record, whatever else fed it later.
+   */
+  sharedReferral?: true;
 }
 
 /**

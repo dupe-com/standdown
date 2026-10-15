@@ -21,8 +21,9 @@ existing users will notice:
   `cj` alone. `afsrc=1` on its own still stands down everywhere it did. (With the
   `webext` adapter's `webRequest` plane, `universal`'s CJ link and domain rules
   still see your CJ click as before.)
-- Saved state gains an optional `sharedOnlyPolicyIds` field. 0.4.0 ignores it,
-  so rolling back keeps working.
+- Saved state gains optional fields (`sharedOnlyPolicyIds`, `sharedReferral`,
+  and `sharedAlone` on relay tab records). 0.4.0 ignores them, so rolling back
+  keeps working.
 - **Signed policy refresh:** serve these policies only to clients on 0.5.0 or
   later. 0.4.0 doesn't know `match: 'pattern'`, so it rejects the new Rakuten
   policy and stands down on every page (the safe direction, but it never
@@ -54,7 +55,15 @@ existing users will notice:
   stand-down announcement.
 - **`cjPolicy` 0.3.0 and `universalPolicy` 0.2.0**: `afsrc=1` is marked shared.
 - **`selfClickLift`** can lift a competitor's same-network click that also
-  carried `afsrc=1`. A stand-down that rests only on `afsrc=1` is never lifted.
+  carried `afsrc=1`. A stand-down that rests only on `afsrc=1`, or where any
+  landing carried `afsrc=1` alone, is never lifted.
+
+### Fixed
+
+- **Relay: a referral from an earlier landing stands down no matter when the
+  shop strips your own click's param.** Before, your own click in the current
+  URL could hide a competitor's param relayed from an earlier landing in the same
+  tab, until the shop removed your param.
 
 ## 0.4.0 - 2026-10-13
 

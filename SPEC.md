@@ -198,8 +198,10 @@ current navigation deletes the session record it is filed under (the
   network-specific signal is the own click's policy or on its network (a record
   written before `policyIds` existed is never lifted). Policies that only ever
   matched through shared signals (`SessionRecord.sharedOnlyPolicyIds`, e.g.
-  `afsrc=1`) need no covering, but at least one network-specific contributor
-  must exist: a record fed only by shared signals is never lifted;
+  `afsrc=1` riding with a network's own param) need no covering, but at least
+  one network-specific contributor must exist. A record that any referral of
+  shared signals alone fed (`SessionRecord.sharedReferral`) is never lifted; the
+  relay mirrors this per tab (`sharedAlone`);
 - the record's latest referral (`max(startedAt, lastActivityAt)`) is strictly
   older than the own click;
 - nothing else matched this navigation (a competing param, cookie or redirect
