@@ -12,8 +12,8 @@ export const DEFAULT_RELAY_MAX_AGE_MS = 30 * 60 * 1_000;
 /** Default for how quickly a cross-host forward must land (see `hopWindowMs`). */
 export const DEFAULT_RELAY_HOP_WINDOW_MS = 10_000;
 
-const MAX_MATCHES = 32;
-const MAX_PARAMS = 16;
+export const MAX_MATCHES = 32;
+export const MAX_PARAMS = 16;
 const MAX_NAME_LENGTH = 64;
 const MAX_HOST_LENGTH = 253;
 

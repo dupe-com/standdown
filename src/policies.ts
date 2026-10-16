@@ -6,6 +6,7 @@ const LAST_VERIFIED = '2026-07-10';
 // exactly the session, with no extra timed minimum" (matches networks that set no
 // stand-down TTL in production).
 const SESSION_ONLY_MIN_MS = 0;
+const THIRTY_MINUTES_MS = 1_800_000;
 const SIXTY_MINUTES_MS = 3_600_000;
 const COC_INACTIVITY_MS = 3_600_000;
 const COC_FALLBACK_MIN_MS = 5_400_000;
@@ -30,7 +31,7 @@ export const cocDefaults = {
 export const cjPolicy = {
   id: 'cj',
   schemaVersion: 3,
-  policyVersion: '0.2.0',
+  policyVersion: '0.3.0',
   network: {
     id: 'cj',
     name: 'CJ Affiliate',
@@ -49,7 +50,7 @@ export const cjPolicy = {
         anyOf: [{ allOf: [{ name: 'sf_cs', value: 'cj', match: 'equals' }] }],
       },
       {
-        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals' }] }],
+        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals', shared: true }] }],
       },
     ],
     redirectDomains: [
@@ -102,7 +103,7 @@ export const cjPolicy = {
 export const impactPolicy = {
   id: 'impact',
   schemaVersion: 3,
-  policyVersion: '0.1.0',
+  policyVersion: '0.2.0',
   network: {
     id: 'impact',
     name: 'Impact',
@@ -111,7 +112,7 @@ export const impactPolicy = {
   detection: {
     landingParams: [
       {
-        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals' }] }],
+        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals', shared: true }] }],
       },
       { anyOf: [{ allOf: [{ name: 'irclickid' }] }] },
       { anyOf: [{ allOf: [{ name: 'irgwc' }] }] },
@@ -121,7 +122,7 @@ export const impactPolicy = {
   standdown: {
     scope: 'advertiser',
     sessionRule: 'session-or-min',
-    minDurationMs: SESSION_ONLY_MIN_MS,
+    minDurationMs: THIRTY_MINUTES_MS,
     behaviors: standdownBehaviors,
   },
   activation: { mode: 'user-click' },
@@ -129,14 +130,14 @@ export const impactPolicy = {
     sourceUrl: 'https://impact.com/stand-down-policy.ihtml',
     lastVerified: LAST_VERIFIED,
     notes:
-      'Impact stand-down policy URL and irclickid/im_ref signals are from pre-build research; irgwc is attributed to piedotorg/standdown-domains. Session-only (no minimum) matches production enforcement, which sets no stand-down TTL.',
+      'Impact stand-down policy URL and irclickid/im_ref signals are from pre-build research; irgwc is attributed to piedotorg/standdown-domains. Stand-down lasts the browser session or 30 minutes, whichever is longer: Impact\'s stand-down announcement says "The stand-down period lasts for 30 minutes or until the browser session ends" (https://release.impact.com/partners/announcements/a-better-way-to-grab-links-a-stand-down-policy-for-software-publishers-free-courses-and-more).',
   },
 } as const satisfies StanddownPolicy;
 
 export const rakutenPolicy = {
   id: 'rakuten',
   schemaVersion: 3,
-  policyVersion: '0.1.0',
+  policyVersion: '0.2.0',
   network: {
     id: 'rakuten',
     name: 'Rakuten Advertising',
@@ -156,7 +157,20 @@ export const rakutenPolicy = {
           // Matches the Rakuten PublisherStandown-SDK's own detection.
           { allOf: [{ name: 'ranEAID' }] },
           { allOf: [{ name: 'ranSiteID' }] },
-          { allOf: [{ name: 'siteID' }] },
+          // Some advertisers pass the publisher's site ID as a plain siteID. It
+          // counts only with Rakuten's shape (11 chars, a hyphen, 22 chars): a
+          // bare siteID is common on unrelated sites (country codes, campaign
+          // codes, other networks' IDs).
+          {
+            allOf: [
+              {
+                name: 'siteID',
+                match: 'pattern',
+                value: '^[A-Za-z0-9/*_.]{11}-[A-Za-z0-9/*_.]{22}$',
+                example: 'ABCDEFGHIJK-abcdefghijklmnopqrstuv',
+              },
+            ],
+          },
         ],
       },
     ],
@@ -186,7 +200,7 @@ export const rakutenPolicy = {
     sourceUrl: 'https://github.com/rakutenrewards/PublisherStandown-SDK',
     lastVerified: LAST_VERIFIED,
     notes:
-      'Rakuten SDK is detection-only and ships no policies; duration uses CoC fallback because the public source describes browser-session semantics without a fixed millisecond value.',
+      'Rakuten SDK is detection-only and ships no policies; duration uses CoC fallback because the public source describes browser-session semantics without a fixed millisecond value. A plain siteID counts only with Rakuten\'s site-ID shape (11 characters, a hyphen, 22 characters): neither the Rakuten SDK nor its network policy names a bare siteID, and the name is common on unrelated sites.',
   },
 } as const satisfies StanddownPolicy;
 
@@ -394,7 +408,7 @@ export const partnerizePolicy = {
 export const universalPolicy = {
   id: 'universal',
   schemaVersion: 3,
-  policyVersion: '0.1.0',
+  policyVersion: '0.2.0',
   network: {
     id: 'universal',
     name: 'Universal affiliate source',
@@ -403,7 +417,7 @@ export const universalPolicy = {
   detection: {
     landingParams: [
       {
-        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals' }] }],
+        anyOf: [{ allOf: [{ name: 'afsrc', value: '1', match: 'equals', shared: true }] }],
       },
     ],
     redirectDomains: [
@@ -411,6 +425,7 @@ export const universalPolicy = {
         pattern: '^https?\\:\\/.*[\\?\\&]afsrc=1',
         kind: 'regex',
         comment: 'Universal standdown parameter from piedotorg/standdown-domains',
+        shared: true,
       },
       {
         pattern: '^https?:\\/\\/www\\.youtube\\.com\\/redirect',

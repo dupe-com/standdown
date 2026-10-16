@@ -1,5 +1,83 @@
 # Changelog
 
+## Unreleased
+
+A new `'pattern'` param match, sharper Rakuten and Impact policies, and clearer
+handling of the shared `afsrc=1` signal.
+
+### Upgrading from 0.4.x
+
+No exports were removed, and code written for 0.4.0 still type-checks. What
+existing users will notice:
+
+- **Rakuten counts a plain `siteID` only in Rakuten's site-ID shape** (11
+  characters, a hyphen, 22 characters), so it stands down on real Rakuten site
+  IDs and leaves the unrelated `siteID` params many sites use alone. `ranMID`,
+  `ranEAID` and `ranSiteID` work as before.
+- **An Impact stand-down lasts at least 30 minutes**, so it survives a quick
+  browser restart, as Impact's stand-down policy asks.
+- **Your own click explains `afsrc=1` in the same URL.** A CJ link of yours that
+  carries `afsrc=1` now activates as your own click, with the marker scoped to
+  `cj` alone. `afsrc=1` on its own still stands down everywhere it did. (With the
+  `webext` adapter's `webRequest` plane, `universal`'s CJ link and domain rules
+  still see your CJ click as before.)
+- Saved state gains optional fields (`sharedOnlyPolicyIds`, `sharedReferral`,
+  and `sharedAlone` on relay tab records). 0.4.0 ignores them, so rolling back
+  keeps working.
+- **Signed policy refresh is stricter.** A bundle can't remove `disableHosts` or
+  `trackingHosts`, and its regex domain rules (in any of the four fields) may only
+  reuse patterns the client already ships. New domains go in as `suffix` rules.
+  A bundle that breaks either rule is refused, and the current policies stay in
+  use.
+- **Signed policy refresh:** serve these policies only to clients on 0.5.0 or
+  later. 0.4.0 doesn't know `match: 'pattern'`, so it rejects the new Rakuten
+  policy and stands down on every page (the safe direction, but it never
+  activates).
+
+### Added
+
+- **`match: 'pattern'`** on `ParamMatcher`: `value` is an anchored regular
+  expression (`^…$`, no flags, at most 256 characters), checked against each
+  value of the param. To keep matching fast, only a small subset is accepted:
+  single characters or classes with counts, at most one of them variable-length,
+  and no groups or `|`. Validation rejects anything else, so sessions and adapters
+  stand down with such a policy. Values over 512
+  characters never match. Works in detection, the content, webext and relay
+  adapters, and `selfPatterns`. An optional `example` documents a matching value
+  and is checked by validation and used by the conformance grader.
+- **`shared: true`** on `ParamMatcher` and `DomainRule`, for a signal several
+  networks append. The bundled `cj`, `impact` and `universal` policies mark
+  `afsrc=1` this way.
+- **`Decision.matchedParams`** and **`Decision.sharedOnly`**: a fresh stand-down
+  names the landing params that triggered it (names only, never values), and
+  says when it rests only on a shared signal.
+
+### Changed
+
+- **`rakutenPolicy` 0.2.0**: plain `siteID` uses `match: 'pattern'` with
+  Rakuten's site-ID shape.
+- **`impactPolicy` 0.2.0**: `minDurationMs` is 30 minutes, citing Impact's
+  stand-down announcement.
+- **`cjPolicy` 0.3.0 and `universalPolicy` 0.2.0**: `afsrc=1` is marked shared.
+- **`selfClickLift`** can lift a competitor's same-network click that also
+  carried `afsrc=1`. A stand-down that rests only on `afsrc=1`, or where any
+  landing carried `afsrc=1` alone, is never lifted.
+
+### Fixed
+
+- **Relay: a referral from an earlier landing stands down no matter when the
+  shop strips your own click's param.** Before, your own click in the current
+  URL could hide a competitor's param relayed from an earlier landing in the same
+  tab, until the shop removed your param.
+- **Signed bundles can't slow down decisions with a new regex.** The old check
+  only caught some slow regex shapes, and skipped `disableHosts` and
+  `trackingHosts`. Bundles now reuse shipped regex patterns only.
+- **Signed bundles can't remove `disableHosts` or `trackingHosts`.**
+- **Relay: param names a page writes into the capture's `sessionStorage` copy
+  can't crowd out a real referral.** The background keeps only names the policy
+  reads, and keeps stored records within their size limits. Before, 16 made-up
+  names could make the tab's record too big to load, and the referral was lost.
+
 ## 0.4.0 - 2026-10-13
 
 New opt-in `standdown/relay` entry point and `selfClickLift`, plus a few default

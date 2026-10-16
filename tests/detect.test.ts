@@ -200,7 +200,7 @@ describe('detect', () => {
       detect(
         {
           ...DEFAULT_SIGNALS,
-          url: 'https://merchant.example/?siteID=site',
+          url: 'https://merchant.example/?siteID=ABCDEFGHIJK-abcdefghijklmnopqrstuv',
         },
         [rakutenPolicy],
       ).matched,
@@ -623,6 +623,10 @@ function urlForPolicy(policy: StanddownPolicy): string {
 }
 
 function valueForMatcher(matcher: ParamMatcher): string {
+  if (matcher.match === 'pattern') {
+    if (matcher.example === undefined) throw new Error(`pattern matcher ${matcher.name} needs an example`);
+    return matcher.example;
+  }
   if (matcher.match === 'contains') {
     return `before-${matcher.value}-after`;
   }

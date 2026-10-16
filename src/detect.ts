@@ -1,9 +1,11 @@
+import { compiledPattern, MAX_PATTERN_INPUT, MAX_PATTERN_VALUES } from './pattern';
 import type {
   CookieRule,
   Detection,
   DomainRule,
   InitiatorRule,
   MatchedRule,
+  ParamGroup,
   ParamMatcher,
   ParamRule,
   ReferrerClass,
@@ -41,6 +43,11 @@ export function detect(
   const matched: MatchedRule[] = [];
   const selfExemptScopes: SelfExemptScope[] = [];
   let selfMatch = false;
+  // The host's own scoped click in this URL explains the shared signals that
+  // ride along with it (a network appends afsrc=1 to its own clicks).
+  const ownClick = policies.some((policy) =>
+    hasScopedSelfExemption(currentUrl, signals.selfPatterns, policy),
+  );
 
   for (const policy of policies) {
     const disabledHostRule = (policy.detection.disableHosts ?? []).find((rule) =>
@@ -83,7 +90,7 @@ export function detect(
     }
 
     matched.push(
-      ...collectPolicyMatches(policy, signals, currentUrl, advertiserHost),
+      ...collectPolicyMatches(policy, signals, currentUrl, advertiserHost, ownClick),
     );
   }
 
@@ -170,6 +177,7 @@ function collectPolicyMatches(
   signals: Signals,
   currentUrl: URL,
   advertiserHost: string,
+  ownClick: boolean,
 ): MatchedRule[] {
   const matches: MatchedRule[] = [];
   const advertiserHostMatches =
@@ -182,31 +190,40 @@ function collectPolicyMatches(
     const landingParams = caseInsensitiveParams(currentUrl.searchParams);
 
     for (const rule of policy.detection.landingParams ?? []) {
-      if (paramRuleMatches(rule, landingParams)) {
-        matches.push(
-          matchedRule(
+      const found = paramRuleMatch(rule, landingParams, ownClick);
+
+      if (found) {
+        matches.push({
+          ...matchedRule(
             policy,
             'landing-param',
             describeParamRule(rule),
             advertiserHost,
             rule.reason ?? 'landing parameter matched',
           ),
-        );
+          params: found.params,
+          ...(found.sharedOnly ? { sharedOnly: true as const } : {}),
+        });
       }
     }
   }
 
   for (const rule of policy.detection.redirectDomains ?? []) {
+    if (ownClick && rule.shared === true) {
+      continue;
+    }
+
     if ((signals.redirectChain ?? []).some((url) => domainRuleMatchesUrl(rule, url))) {
-      matches.push(
-        matchedRule(
+      matches.push({
+        ...matchedRule(
           policy,
           'redirect-domain',
           `${rule.kind}:${rule.pattern}`,
           advertiserHost,
           rule.comment ?? 'redirect domain matched',
         ),
-      );
+        ...(rule.shared === true ? { sharedOnly: true as const } : {}),
+      });
     }
   }
 
@@ -313,15 +330,48 @@ export function exactParams(params: URLSearchParams): ParamValues {
   return (name) => params.getAll(name);
 }
 
-function paramRuleMatches(rule: ParamRule, params: ParamValues): boolean {
-  return rule.anyOf.some((group) =>
-    group.allOf.every((matcher) => paramMatcherMatches(matcher, params)),
-  );
+/** A group made only of shared matchers (`afsrc=1`): no single network's signal. */
+export function isSharedGroup(group: ParamGroup): boolean {
+  return group.allOf.length > 0 && group.allOf.every((matcher) => matcher.shared === true);
 }
 
+/**
+ * The groups of `rule` that match, as param names plus whether all of them are
+ * shared-only. With `ownClick`, shared-only groups are explained by the host's
+ * own click and skipped. `undefined` when nothing matches.
+ */
+export function paramRuleMatch(
+  rule: ParamRule,
+  params: ParamValues,
+  ownClick = false,
+): { params: string[]; sharedOnly: boolean } | undefined {
+  const names = new Set<string>();
+  let sharedOnly = true;
+
+  for (const group of rule.anyOf) {
+    const shared = isSharedGroup(group);
+
+    if ((ownClick && shared) || !group.allOf.every((matcher) => paramMatcherMatches(matcher, params, true))) {
+      continue;
+    }
+
+    for (const matcher of group.allOf) names.add(matcher.name);
+    sharedOnly &&= shared;
+  }
+
+  return names.size > 0 ? { params: [...names], sharedOnly } : undefined;
+}
+
+/**
+ * Whether `matcher` matches `params`. `tooManyValues` is the answer when a
+ * `'pattern'` matcher meets more than {@link MAX_PATTERN_VALUES} values of its
+ * param: `true` for detection (stand down), `false` (the default) for
+ * self-exemptions, so neither direction fails open.
+ */
 export function paramMatcherMatches(
   matcher: ParamMatcher,
   params: ParamValues,
+  tooManyValues = false,
 ): boolean {
   const values = params(matcher.name);
   const mode = matcher.match ?? (matcher.value === undefined ? 'exists' : 'equals');
@@ -338,6 +388,18 @@ export function paramMatcherMatches(
 
   if (mode === 'equals') {
     return values.some((value) => value === expectedValue);
+  }
+
+  if (mode === 'pattern') {
+    // Compiled once per source; an invalid source never matches.
+    const pattern = compiledPattern(expectedValue);
+    if (pattern === undefined) {
+      return false;
+    }
+    if (values.length > MAX_PATTERN_VALUES) {
+      return tooManyValues;
+    }
+    return values.some((value) => value.length <= MAX_PATTERN_INPUT && pattern.test(value));
   }
 
   return values.some((value) => value.includes(expectedValue));
@@ -426,3 +488,5 @@ function parseUrl(value: string): URL | undefined {
 function hostFromUrl(value: string): string | undefined {
   return parseUrl(value)?.hostname.toLowerCase();
 }
+
+export { patternCacheSizeForTests } from './pattern';

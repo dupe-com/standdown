@@ -1,3 +1,4 @@
+import { compiledPattern, MAX_PATTERN_INPUT, patternProblem } from './pattern';
 import type {
   Behavior,
   CookieRule,
@@ -13,7 +14,7 @@ const BEHAVIORS = new Set<Behavior>([
   'no-background-tracking',
 ]);
 
-const PARAM_MATCHES = new Set(['exists', 'equals', 'contains']);
+const PARAM_MATCHES = new Set(['exists', 'equals', 'contains', 'pattern']);
 const COOKIE_MATCHES = new Set(['exact', 'substring']);
 const DOMAIN_KINDS = new Set(['suffix', 'regex']);
 const REFERRER_CLASSES = new Set([
@@ -270,11 +271,40 @@ function validateParamMatcher(matcherValue: unknown): void {
     throw new TypeError('ParamMatcher.match is invalid');
   }
 
+  if (matcher.shared !== undefined && typeof matcher.shared !== 'boolean') {
+    throw new TypeError('ParamMatcher.shared must be a boolean');
+  }
+
   if (
-    (matcher.match === 'equals' || matcher.match === 'contains') &&
+    (matcher.match === 'equals' || matcher.match === 'contains' || matcher.match === 'pattern') &&
     matcher.value === undefined
   ) {
-    throw new TypeError('ParamMatcher.value is required for equals/contains');
+    throw new TypeError('ParamMatcher.value is required for equals/contains/pattern');
+  }
+
+  if (matcher.match === 'pattern') {
+    const problem = patternProblem(matcher.value as string);
+
+    if (problem !== undefined) {
+      throw new TypeError(`ParamMatcher.value pattern ${problem}`);
+    }
+  }
+
+  if (matcher.example !== undefined) {
+    string(matcher.example, 'ParamMatcher.example');
+
+    if (matcher.match !== 'pattern') {
+      throw new TypeError('ParamMatcher.example is only for match: pattern');
+    }
+
+    // Same bound as real values, so checking it stays cheap.
+    if (matcher.example.length > MAX_PATTERN_INPUT) {
+      throw new TypeError(`ParamMatcher.example is longer than ${MAX_PATTERN_INPUT} characters`);
+    }
+
+    if (!compiledPattern(matcher.value as string)?.test(matcher.example)) {
+      throw new TypeError('ParamMatcher.example does not match its pattern');
+    }
   }
 }
 
@@ -284,6 +314,10 @@ function validateDomainRule(ruleValue: unknown): void {
 
   if (!DOMAIN_KINDS.has(rule.kind)) {
     throw new TypeError('DomainRule.kind is invalid');
+  }
+
+  if (rule.shared !== undefined && typeof rule.shared !== 'boolean') {
+    throw new TypeError('DomainRule.shared must be a boolean');
   }
 
   if (rule.kind === 'suffix') {

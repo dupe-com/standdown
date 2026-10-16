@@ -3,6 +3,7 @@ import {
   domainRuleMatchesUrl,
   exactParams,
   paramMatcherMatches,
+  paramRuleMatch,
 } from '../detect';
 import { freshNavigationStart, type NavigationTimingLike } from '../navigation';
 import type { DomainRule, SelfExemption, StanddownPolicy } from '../types';
@@ -137,6 +138,10 @@ function matchLanding(
   const referrerHost = referrerUrl?.hostname.toLowerCase();
   const matches: LandingMatch[] = [];
   const self: string[] = [];
+  // As in detect(): an own click in a params source explains the shared
+  // signals (afsrc=1) in that same source, for every network.
+  const ownClickIn = (params: URLSearchParams) =>
+    opts.policies.some((policy) => isSelfExempt(opts.selfPatterns, policy, params));
 
   for (const policy of opts.policies) {
     const tracking = [...(policy.detection.trackingHosts ?? []), ...(opts.trackingHosts ?? [])];
@@ -172,12 +177,9 @@ function matchLanding(
 
       // Names match in any casing (CJEVENT, CjEvent); values stay exact.
       const landing = caseInsensitiveParams(params);
+      const ownClick = ownClickIn(params);
       for (const rule of policy.detection.landingParams ?? []) {
-        for (const group of rule.anyOf) {
-          if (group.allOf.every((matcher) => paramMatcherMatches(matcher, landing))) {
-            for (const matcher of group.allOf) names.add(matcher.name);
-          }
-        }
+        for (const name of paramRuleMatch(rule, landing, ownClick)?.params ?? []) names.add(name);
       }
     }
 

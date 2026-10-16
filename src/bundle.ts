@@ -40,7 +40,7 @@ export async function verifyPolicyBundle(
     return { ok: false, violation: 'bad-signature' };
   }
 
-  const regexViolation = regexComplexityViolation(update.policies);
+  const regexViolation = regexComplexityViolation(current, update.policies);
 
   if (regexViolation !== undefined) {
     return { ok: false, violation: regexViolation };
@@ -152,6 +152,24 @@ function detectionViolation(
   }
 
   if (
+    !domainRulesSurvive(
+      currentPolicy.detection.disableHosts,
+      updatedPolicy.detection.disableHosts,
+    )
+  ) {
+    return 'disable-hosts-narrowed';
+  }
+
+  if (
+    !domainRulesSurvive(
+      currentPolicy.detection.trackingHosts,
+      updatedPolicy.detection.trackingHosts,
+    )
+  ) {
+    return 'tracking-hosts-narrowed';
+  }
+
+  if (
     !cookieRulesSurvive(
       currentPolicy.detection.cookiePatterns,
       updatedPolicy.detection.cookiePatterns,
@@ -231,14 +249,38 @@ function domainRulesSurvive(
   );
 }
 
+/**
+ * Regex `DomainRule`s in a signed bundle may only reuse patterns the client
+ * already runs (shipped with it, so trusted). A regex's matching cost can't be
+ * bounded reliably from its source, so new rules must be `suffix` rules, which
+ * are always cheap. After a refresh the active set still holds only shipped
+ * patterns, so this holds across refreshes.
+ */
 function regexComplexityViolation(
+  current: readonly StanddownPolicy[],
   policies: readonly StanddownPolicy[],
 ): string | undefined {
+  const known = new Set(
+    current.flatMap((policy) =>
+      domainRuleEntries(policy).flatMap(([, rules]) =>
+        (rules ?? []).filter((rule) => rule.kind === 'regex').map((rule) => rule.pattern),
+      ),
+    ),
+  );
+
   for (const policy of policies) {
     for (const [field, rules] of domainRuleEntries(policy)) {
       for (const rule of rules ?? []) {
-        if (rule.kind === 'regex' && isComplexRegex(rule.pattern)) {
+        if (rule.kind !== 'regex') {
+          continue;
+        }
+
+        if (isComplexRegex(rule.pattern)) {
           return `${policy.id}:complex-regex:${field}`;
+        }
+
+        if (!known.has(rule.pattern)) {
+          return `${policy.id}:new-regex:${field}`;
         }
       }
     }
@@ -253,6 +295,8 @@ function domainRuleEntries(
   return [
     ['detection.advertiserHosts', policy.detection.advertiserHosts],
     ['detection.redirectDomains', policy.detection.redirectDomains],
+    ['detection.disableHosts', policy.detection.disableHosts],
+    ['detection.trackingHosts', policy.detection.trackingHosts],
   ] as const;
 }
 

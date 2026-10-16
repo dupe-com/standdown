@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   canonicalPolicyBundlePayload,
+  type DomainRule,
   detect,
   type SignedPolicyBundle,
   type StanddownPolicy,
   verifyPolicyBundle,
 } from '../src';
-import { cjPolicy, rakutenPolicy, sovrnSkimlinksPolicy } from '../src/policies';
+import {
+  allPolicies,
+  cjPolicy,
+  experimentalPolicies,
+  rakutenPolicy,
+  sovrnSkimlinksPolicy,
+  universalPolicy,
+} from '../src/policies';
 
 const textEncoder = new TextEncoder();
 
@@ -191,6 +199,77 @@ describe('verifyPolicyBundle', () => {
       ok: false,
       violation: 'cj:complex-regex:detection.redirectDomains',
     });
+  });
+
+  it.each([
+    ['detection.redirectDomains', '^(\\w|\\w)+$'],
+    ['detection.redirectDomains', 'a{16}a{16}a{16}b'],
+    ['detection.advertiserHosts', '(\\w|\\w)+\\.example$'],
+    ['detection.disableHosts', '^shop\\.example$'],
+    ['detection.trackingHosts', 'click\\.example'],
+  ] as const)('rejects a regex the client does not already ship, in %s (%s)', async (field, pattern) => {
+    const keyPair = await createSigningKeyPair();
+    const key = field.split('.')[1] as 'redirectDomains' | 'advertiserHosts' | 'disableHosts' | 'trackingHosts';
+    const update = clonePolicy(cjPolicy);
+    update.detection = {
+      ...update.detection,
+      [key]: [...(update.detection[key] ?? []), { pattern, kind: 'regex' }],
+    };
+    const bundle = await signedBundle([update], keyPair.privateKey);
+
+    await expect(verifyPolicyBundle([cjPolicy], bundle, keyPair.publicJwk)).resolves.toEqual({
+      ok: false,
+      violation: `cj:new-regex:${field}`,
+    });
+  });
+
+  it('accepts a regex the client already ships, moved into another field', async () => {
+    const keyPair = await createSigningKeyPair();
+    const current = clonePolicy(universalPolicy);
+    const shipped = (current.detection.redirectDomains ?? []).find((rule) => rule.kind === 'regex') as DomainRule;
+    expect(shipped).toBeDefined();
+    const update = clonePolicy(current);
+    update.detection = { ...update.detection, trackingHosts: [shipped] };
+    const bundle = await signedBundle([update], keyPair.privateKey);
+
+    await expect(verifyPolicyBundle([current], bundle, keyPair.publicJwk)).resolves.toMatchObject({ ok: true });
+  });
+
+  it('new domains can still be added as suffix rules', async () => {
+    const keyPair = await createSigningKeyPair();
+    const update = clonePolicy(cjPolicy);
+    update.detection = {
+      ...update.detection,
+      redirectDomains: [...(update.detection.redirectDomains ?? []), { pattern: 'new-tracker.example', kind: 'suffix' }],
+    };
+    const bundle = await signedBundle([update], keyPair.privateKey);
+
+    await expect(verifyPolicyBundle([cjPolicy], bundle, keyPair.publicJwk)).resolves.toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ['disableHosts', 'disable-hosts-narrowed'],
+    ['trackingHosts', 'tracking-hosts-narrowed'],
+  ] as const)('rejects a bundle that removes %s', async (key, violation) => {
+    const keyPair = await createSigningKeyPair();
+    const current = clonePolicy(cjPolicy);
+    current.detection = { ...current.detection, [key]: [{ pattern: 'shop.example', kind: 'suffix' }] };
+    const update = clonePolicy(current);
+    update.detection = { ...update.detection, [key]: [] };
+    const bundle = await signedBundle([update], keyPair.privateKey);
+
+    await expect(verifyPolicyBundle([current], bundle, keyPair.publicJwk)).resolves.toEqual({
+      ok: false,
+      violation: `cj:${violation}`,
+    });
+  });
+
+  it('accepts every bundled policy, so serving them as a bundle keeps working', async () => {
+    const keyPair = await createSigningKeyPair();
+    const policies = [...allPolicies, ...experimentalPolicies].map(clonePolicy);
+    const bundle = await signedBundle(policies, keyPair.privateKey);
+
+    await expect(verifyPolicyBundle(policies, bundle, keyPair.publicJwk)).resolves.toMatchObject({ ok: true });
   });
 });
 

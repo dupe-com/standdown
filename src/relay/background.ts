@@ -1,4 +1,4 @@
-import { detect, domainRuleMatchesUrl } from '../detect';
+import { detect, domainRuleMatchesUrl, isSharedGroup } from '../detect';
 import { pickSessionOptions, StanddownSession } from '../session';
 import {
   ChromeLocalStateStore,
@@ -26,6 +26,8 @@ import {
   isLandingRecord,
   type LandingMatch,
   type LandingRecord,
+  MAX_MATCHES,
+  MAX_PARAMS,
   RELAY_CAPTURE_MESSAGE,
   RELAY_SHOULD_STAND_DOWN_MESSAGE,
   type RelayShouldStandDownMessage,
@@ -120,6 +122,12 @@ export interface TabLanding {
   /** `selfClickLift` only: policies the tab's latest own click covered, and when. */
   readonly self?: readonly string[];
   readonly selfAt?: number;
+  /**
+   * Set once a capture in this record carried shared signals alone (`afsrc=1`
+   * and nothing network-specific). Its shared matches are then never dropped
+   * by a later own click, mirroring the session's `sharedReferral`.
+   */
+  readonly sharedAlone?: true;
 }
 
 export interface RelayMessageResponse {
@@ -183,6 +191,20 @@ export function createRelayStanddown(
   const store = opts.store ?? defaultStore(chromeApi, now);
   const session = new StanddownSession(store, pickSessionOptions(opts));
   const policyById = new Map(opts.policies.map((policy) => [policy.id, policy]));
+  const policyNames = new Map(
+    opts.policies.map((policy) => [
+      policy.id,
+      new Set(
+        (policy.detection.landingParams ?? []).flatMap((rule) =>
+          rule.anyOf.flatMap((group) => group.allOf.map((matcher) => matcher.name)),
+        ),
+      ),
+    ]),
+  );
+  // Replay can't reconstruct a value that fits a `pattern` (capture keeps names
+  // only), so the replay runs against a copy where each such group also accepts
+  // the replay placeholder. The original group stays, for values still in the URL.
+  const replayPolicies = opts.policies.map(withReplayablePatterns);
   const liftOn = opts.selfClickLift === 'same-network';
   const sameNetwork = (a: string, b: string) =>
     a === b ||
@@ -275,20 +297,44 @@ export function createRelayStanddown(
     return carriesOver(landing, host, at, landing.self ?? [], (policyId) => policyId);
   }
 
+  /** A relayed match whose every param is a shared signal (`afsrc=1`) in its policy. */
+  const sharedOnlyMatch = (match: LandingMatch) => {
+    const groups = policyById.get(match.policyId)?.detection.landingParams?.flatMap((rule) => rule.anyOf) ?? [];
+    return match.params.every((name) => {
+      const holding = groups.filter((group) => group.allOf.some((m) => m.name === name));
+      return holding.length > 0 && holding.every(isSharedGroup);
+    });
+  };
+
   /**
    * An older landing followed by a newer capture: per network, the newer one
    * wins. A newer own click drops that network's older referral params, and a
-   * newer referral drops that network's older own click. With `selfClickLift`
-   * off there is no own-click data, so this is a plain merge.
+   * newer referral drops that network's older own click. As in the session's
+   * lift, the older shared-only params (`afsrc=1`) go too when the own click
+   * covers every network-specific one, and stay when they were alone. With
+   * `selfClickLift` off there is no own-click data, so this is a plain merge.
    */
   function combine(
-    older: { matches: readonly LandingMatch[]; self?: readonly string[]; selfAt?: number },
+    older: {
+      matches: readonly LandingMatch[];
+      self?: readonly string[];
+      selfAt?: number;
+      sharedAlone?: true;
+    },
     newerMatches: readonly LandingMatch[],
     newerSelf: readonly string[],
     newerAt: number,
-  ): Pick<TabLanding, 'matches' | 'self' | 'selfAt'> {
+  ): Pick<TabLanding, 'matches' | 'self' | 'selfAt' | 'sharedAlone'> {
+    const ownNetwork = (match: LandingMatch) => newerSelf.some((id) => sameNetwork(id, match.policyId));
+    const specific = older.matches.filter((match) => !sharedOnlyMatch(match));
+    // Merged per policy, the matches no longer say which landing carried what:
+    // after a landing of shared signals alone, an own click never drops them.
+    const coversAll = !older.sharedAlone && specific.length > 0 && specific.every(ownNetwork);
+    const sharedAlone =
+      older.sharedAlone || (newerMatches.length > 0 && newerMatches.every(sharedOnlyMatch));
     const matches = mergeMatches(
-      older.matches.filter((match) => !newerSelf.some((id) => sameNetwork(id, match.policyId))),
+      // Shared-only matches name no network, so only `coversAll` drops them.
+      older.matches.filter((match) => (sharedOnlyMatch(match) ? !coversAll : !ownNetwork(match))),
       newerMatches,
     );
     const self = [
@@ -298,10 +344,14 @@ export function createRelayStanddown(
         ),
         ...newerSelf,
       ]),
-    ];
+    ].slice(0, MAX_MATCHES);
     const selfAt = newerSelf.length > 0 ? newerAt : older.selfAt;
 
-    return self.length > 0 && selfAt !== undefined ? { matches, self, selfAt } : { matches };
+    return {
+      matches,
+      ...(self.length > 0 && selfAt !== undefined ? { self, selfAt } : {}),
+      ...(sharedAlone ? { sharedAlone: true as const } : {}),
+    };
   }
 
   async function ingestCapture(
@@ -313,7 +363,13 @@ export function createRelayStanddown(
       return;
     }
 
-    const known = record.matches.filter((match) => policyById.has(match.policyId));
+    // Only names the policy actually reads: a page can write junk names into the
+    // capture's sessionStorage mirror, and they must not crowd out real ones.
+    const known = record.matches.flatMap((match) => {
+      const names = policyNames.get(match.policyId);
+      const params = names ? match.params.filter((name) => names.has(name)) : [];
+      return params.length > 0 ? [{ policyId: match.policyId, params }] : [];
+    });
     const knownSelf = liftOn ? (record.self ?? []).filter((id) => policyById.has(id)) : [];
 
     await serialize(async () => {
@@ -344,10 +400,13 @@ export function createRelayStanddown(
       const carrySelf = carriedSelf(existing, record.host, at);
 
       if (carry.length > 0 || carrySelf.length > 0) {
-        const older =
-          carrySelf.length > 0 && existing.selfAt !== undefined
-            ? { matches: carry, self: carrySelf, selfAt: existing.selfAt }
-            : { matches: carry };
+        const older = {
+          matches: carry,
+          ...(carrySelf.length > 0 && existing.selfAt !== undefined
+            ? { self: carrySelf, selfAt: existing.selfAt }
+            : {}),
+          ...(existing.sharedAlone ? { sharedAlone: true as const } : {}),
+        };
         await save(tabId, {
           host: record.host,
           at: fresh ? Math.max(existing.at, fresh.at) : existing.at,
@@ -423,6 +482,7 @@ export function createRelayStanddown(
             at: current.at,
             lastAt: current.lastAt,
             matches: current.matches,
+            ...(current.sharedAlone ? { sharedAlone: true as const } : {}),
           });
         }
       }).catch(() => {});
@@ -443,7 +503,30 @@ export function createRelayStanddown(
     }
 
     const replayed: Signals = { ...signals, url: replayUrl(url, relayed, policyById) };
-    const decision = await session.ingest(replayed, opts.policies);
+    const decision = await session.ingest(replayed, replayPolicies);
+
+    // Every relayed match is a referral no own click accounts for: the capture
+    // never records an own click's own network or the shared signals riding
+    // with it, and `combine` drops what a newer own click covered. So an own
+    // click in THIS url (seen again, or not yet stripped) must not hide it.
+    // Decide the relayed matches on their own, on the bare page address and
+    // without own-click patterns, so the answer doesn't depend on timing.
+    if (!decision.standDown && relayed.length > 0) {
+      const page = new URL(url);
+      const alone = await session.ingest(
+        {
+          url: replayUrl(`${page.origin}${page.pathname}`, relayed, policyById),
+          now: at,
+          signalCoverage: 'partial',
+          ...(opts.publisherSites === undefined ? {} : { publisherSites: opts.publisherSites }),
+        },
+        replayPolicies,
+      );
+
+      if (alone.standDown) {
+        return { ...alone, matchKind: 'landing' };
+      }
+    }
 
     if (lifted && !decision.standDown && decision.reason === 'no-active-standdown') {
       return { ...decision, reason: 'self-click-lifted' };
@@ -455,7 +538,7 @@ export function createRelayStanddown(
 
     try {
       const before = detect(signals, opts.policies);
-      const after = detect(replayed, opts.policies);
+      const after = detect(replayed, replayPolicies);
 
       if (before.strongest === undefined && after.strongest !== undefined) {
         return { ...decision, matchKind: 'landing' };
@@ -580,6 +663,49 @@ export function createRelayStanddown(
  * (`equals` / `contains` constants) or a placeholder for `exists`; the page's
  * real values were never captured.
  */
+/**
+ * `policy` with every landing group that uses a `pattern` matcher duplicated as
+ * a group whose pattern matchers equal {@link RELAY_PLACEHOLDER}, the value the
+ * replay appends. The capture already checked the real value against the
+ * pattern in the page. Unchanged policies are returned as is.
+ */
+function withReplayablePatterns(policy: StanddownPolicy): StanddownPolicy {
+  const landingParams = policy.detection.landingParams;
+
+  if (!landingParams?.some((rule) => rule.anyOf.some((g) => g.allOf.some((m) => m.match === 'pattern')))) {
+    return policy;
+  }
+
+  return {
+    ...policy,
+    detection: {
+      ...policy.detection,
+      landingParams: landingParams.map((rule) => ({
+        ...rule,
+        anyOf: rule.anyOf.flatMap((group) =>
+          group.allOf.some((m) => m.match === 'pattern')
+            ? [
+                group,
+                {
+                  allOf: group.allOf.map((m) =>
+                    m.match === 'pattern'
+                      ? {
+                          name: m.name,
+                          match: 'equals' as const,
+                          value: RELAY_PLACEHOLDER,
+                          ...(m.shared === undefined ? {} : { shared: m.shared }),
+                        }
+                      : m,
+                  ),
+                },
+              ]
+            : [group],
+        ),
+      })),
+    },
+  };
+}
+
 function replayUrl(
   url: string,
   relayed: readonly LandingMatch[],
@@ -598,7 +724,10 @@ function replayUrl(
       for (const group of rule.anyOf) {
         if (group.allOf.every((matcher) => names.has(matcher.name))) {
           for (const matcher of group.allOf) {
-            target.searchParams.append(matcher.name, matcher.value ?? RELAY_PLACEHOLDER);
+            target.searchParams.append(
+              matcher.name,
+              matcher.match === 'pattern' ? RELAY_PLACEHOLDER : (matcher.value ?? RELAY_PLACEHOLDER),
+            );
           }
         }
       }
@@ -620,7 +749,11 @@ function mergeMatches(
     merged.set(match.policyId, names);
   }
 
-  return [...merged].map(([policyId, names]) => ({ policyId, params: [...names] }));
+  // Stay within what a stored record may hold, or `load` would reject the whole
+  // record and forget the referral. Earlier (already recorded) entries win.
+  return [...merged]
+    .slice(0, MAX_MATCHES)
+    .map(([policyId, names]) => ({ policyId, params: [...names].slice(0, MAX_PARAMS) }));
 }
 
 function isTabLanding(value: unknown): value is TabLanding {
@@ -632,6 +765,7 @@ function isTabLanding(value: unknown): value is TabLanding {
   const hasSelf = landing.self !== undefined;
   return (
     typeof landing.lastAt === 'number' &&
+    (landing.sharedAlone === undefined || landing.sharedAlone === true) &&
     (hasSelf ? typeof landing.selfAt === 'number' : landing.selfAt === undefined) &&
     isLandingRecord({
       v: 1,

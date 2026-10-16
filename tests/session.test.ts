@@ -8,7 +8,7 @@ import {
   type StateStore,
   validatePolicy,
 } from '../src';
-import { cjPolicy } from '../src/policies';
+import { cjPolicy, impactPolicy } from '../src/policies';
 import {
   ChromeLocalStateStore,
   type ChromeStorageAreaLike,
@@ -91,6 +91,43 @@ describe('StanddownSession', () => {
         [cjPolicy],
       ),
     ).resolves.toMatchObject({ standDown: false });
+  });
+
+  it('keeps an Impact stand-down for at least 30 minutes, even across a browser restart', async () => {
+    const local = new FakeChromeStorageArea();
+    const inSession = (sessionId: string, now: number) =>
+      new StanddownSession(new ChromeLocalStateStore(local, { sessionId, now: () => now }));
+
+    await inSession('browser-session-1', 0).ingest(
+      { url: 'https://merchant.example/?irclickid=abc', now: 0 },
+      [impactPolicy],
+    );
+
+    // Restarted at 29 min: still inside the 30-minute minimum.
+    await expect(
+      inSession('browser-session-2', 1_740_000).ingest({ url: 'https://merchant.example/', now: 1_740_000 }, [
+        impactPolicy,
+      ]),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'impact' });
+
+    // Restarted at 31 min: the session ended and the minimum has passed.
+    await expect(
+      inSession('browser-session-3', 1_860_000).ingest({ url: 'https://merchant.example/', now: 1_860_000 }, [
+        impactPolicy,
+      ]),
+    ).resolves.toMatchObject({ standDown: false });
+
+    // Within one browser session, it lasts the whole session.
+    await inSession('browser-session-4', 2_000_000).ingest(
+      { url: 'https://merchant.example/?irclickid=def', now: 2_000_000 },
+      [impactPolicy],
+    );
+    await expect(
+      inSession('browser-session-4', 2_000_000 + 3 * 3_600_000).ingest(
+        { url: 'https://merchant.example/', now: 2_000_000 + 3 * 3_600_000 },
+        [impactPolicy],
+      ),
+    ).resolves.toMatchObject({ standDown: true, policyId: 'impact' });
   });
 
   it('does not extend session-or-min records when activity is recorded', async () => {
