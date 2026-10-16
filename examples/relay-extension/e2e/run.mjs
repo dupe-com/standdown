@@ -53,6 +53,9 @@ const baseScenarios = [
   { name: 'pushState strips ?cjevent=abc just after load', steps: [u('s2.example', '/later?cjevent=abc')], expect: { relay: true } },
   { name: 'utm_source=cj stripped (value compared in page)', steps: [u('s3.example', '/strip?utm_source=cj')], expect: { relay: true } },
   { name: 'utm_source=google stripped (not CJ)', steps: [u('s4.example', '/strip?utm_source=google')], expect: { relay: false } },
+  // Rakuten plain siteID counts only in Rakuten's site-ID shape (a made-up value).
+  { name: 'siteID in Rakuten shape stripped (pattern compared in page)', steps: [u('s10.example', '/strip?siteID=ABCDEFGHIJK-abcdefghijklmnopqrstuv')], expect: { relay: true, matchKind: 'landing' } },
+  { name: 'siteid=4 stripped (not Rakuten shape)', steps: [u('s11.example', '/strip?siteid=4')], expect: { relay: false } },
   { name: 'link.shop?cjevent=abc -> script -> www.shop', steps: [u('link.s5.example', '/forward?cjevent=abc')], expect: { relay: true } },
   { name: 'clean visit, no referral (positive control)', steps: [u('s6.example', '/clean')], expect: { relay: false } },
   { name: 'param on unrelated site, then shop in same tab', steps: [u('other.example', '/clean?cjevent=abc'), u('s7.example', '/clean')], expect: { relay: false } },
