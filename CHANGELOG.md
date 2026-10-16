@@ -1,13 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-10-16
 
-A new `'pattern'` param match, sharper Rakuten and Impact policies, and clearer
-handling of the shared `afsrc=1` signal.
+A new `'pattern'` param match, sharper Rakuten and Impact policies, clearer
+handling of the shared `afsrc=1` signal, stricter signed policy refresh, and a
+relay that holds on to earlier referrals more reliably.
 
 ### Upgrading from 0.4.x
 
-No exports were removed, and code written for 0.4.0 still type-checks. What
+No exports were removed, and code written for 0.4.0 still type-checks (code that
+switches exhaustively over `ParamMatcher.match` gains a `'pattern'` case). What
 existing users will notice:
 
 - **Rakuten counts a plain `siteID` only in Rakuten's site-ID shape** (11
@@ -16,11 +18,12 @@ existing users will notice:
   `ranEAID` and `ranSiteID` work as before.
 - **An Impact stand-down lasts at least 30 minutes**, so it survives a quick
   browser restart, as Impact's stand-down policy asks.
-- **Your own click explains `afsrc=1` in the same URL.** A CJ link of yours that
-  carries `afsrc=1` now activates as your own click, with the marker scoped to
-  `cj` alone. `afsrc=1` on its own still stands down everywhere it did. (With the
-  `webext` adapter's `webRequest` plane, `universal`'s CJ link and domain rules
-  still see your CJ click as before.)
+- **Your own click accounts for `afsrc=1` in the same URL.** When a scoped
+  `selfPatterns` match is in the URL (say your CJ link, with its marker scoped to
+  `cj` alone), an `afsrc=1` in that same URL no longer stands you down.
+  `afsrc=1` on its own still stands down everywhere it did. (With the `webext`
+  adapter's `webRequest` plane, `universal`'s CJ link and domain rules still see
+  your CJ click as before.)
 - Saved state gains optional fields (`sharedOnlyPolicyIds`, `sharedReferral`,
   and `sharedAlone` on relay tab records). 0.4.0 ignores them, so rolling back
   keeps working.
@@ -28,11 +31,9 @@ existing users will notice:
   `trackingHosts`, and its regex domain rules (in any of the four fields) may only
   reuse patterns the client already ships. New domains go in as `suffix` rules.
   A bundle that breaks either rule is refused, and the current policies stay in
-  use.
-- **Signed policy refresh:** serve these policies only to clients on 0.5.0 or
-  later. 0.4.0 doesn't know `match: 'pattern'`, so it rejects the new Rakuten
-  policy and stands down on every page (the safe direction, but it never
-  activates).
+  use. Serve these policies only to clients on 0.5.0 or later: 0.4.0 doesn't know
+  `match: 'pattern'`, so it rejects the new Rakuten policy and stands down on
+  every page (the safe direction, but it never activates).
 
 ### Added
 
@@ -41,10 +42,12 @@ existing users will notice:
   value of the param. To keep matching fast, only a small subset is accepted:
   single characters or classes with counts, at most one of them variable-length,
   and no groups or `|`. Validation rejects anything else, so sessions and adapters
-  stand down with such a policy. Values over 512
-  characters never match. Works in detection, the content, webext and relay
-  adapters, and `selfPatterns`. An optional `example` documents a matching value
-  and is checked by validation and used by the conformance grader.
+  stand down with such a policy. Values over 512 characters never match, and a
+  URL that repeats the param more than 16 times stands down (an own-click
+  pattern doesn't apply to it). Works in detection, the content, webext and relay
+  adapters, and `selfPatterns`. An optional `example` (at most 512 characters)
+  documents a matching value and is checked by validation and used by the
+  conformance grader.
 - **`shared: true`** on `ParamMatcher` and `DomainRule`, for a signal several
   networks append. The bundled `cj`, `impact` and `universal` policies mark
   `afsrc=1` this way.
